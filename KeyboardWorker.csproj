@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <WindowsSdkPackageVersion>10.0.19041.57</WindowsSdkPackageVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>KeyboardWorker</AssemblyName>
+    <Version>2.0.0</Version>
+    <!-- Where the "업데이트 확인" button looks for new versions: owner/repository on GitHub (public). Leave empty for no update address.
+         To publish an update: raise Version above, run tools\make-dist.ps1, and attach dist\KeyboardWorker-win-x64.zip to a GitHub release tagged v<Version>. -->
+    <UpdateRepository></UpdateRepository>
+    <Product>Keyboard Worker</Product>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <ApplicationIcon Condition="Exists('Assets\pet.ico')">Assets\pet.ico</ApplicationIcon>
+    <!-- Sources live in Core, Pet, Ai, Model, Windows and SelfCheck. These folders are not part of the program:
+         app = the copy that is actually run, dist = the package for other people, tests = the test project,
+         tools = build scripts. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);app\**;dist\**;tests\**;tools\**</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup><InternalsVisibleTo Include="KeyboardWorker.Tests" /></ItemGroup>
+  <ItemGroup><AssemblyMetadata Include="UpdateRepository" Value="$(UpdateRepository)" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="Assets\pet.ico" LogicalName="KeyboardWorker.pet.ico" Condition="Exists('Assets\pet.ico')" /></ItemGroup>
+</Project>

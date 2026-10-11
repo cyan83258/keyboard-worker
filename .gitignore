@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+tests/bin/
+tests/obj/
+
+# The copy that is run and the package for other people are both built from source (tools\build-app.ps1, tools\make-dist.ps1)
+app/
+dist/
+
+# Old hand-made backups from before version control
+work/
+
+# Editor and Windows leftovers
+.vs/
+*.user
+Thumbs.db
