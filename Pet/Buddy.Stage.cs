@@ -37,7 +37,7 @@ public sealed partial class Buddy
             bool onScreen = id == CharacterId || companion?.Preset.Id == id; var mode = PageMode;
             string state = Adventure.Context(id, who.Name) + (onScreen ? Feelings(id != CharacterId) : Affection.Context(Adventure.Friend(id, who.Name).Bond)) + await Surroundings(null);
             // The backgrounds are only offered when the user lets the character change them.
-            var backdrops = Stage.State.AutoBackdrop ? Stage.State.Backdrops.Select(b => b.Title).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() : Array.Empty<string>();
+            var backdrops = Stage.State.AutoBackdrop ? Stage.Backdrops.Select(b => b.Title).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() : Array.Empty<string>();
             var scene = new StageScene(StageTags.Names(Stage.Set(id).Sprites), backdrops, Stage.CurrentTitle, all.Select(c => c.Name).Where(n => n != who.Name).Distinct().ToArray(), note);
             var reply = await StageTalk.Send(StageTalks, Chat.Preferences, who.Persona, mode.Thread(id), text, state, scene, Stage.State.Talk, mode, request.Token, streaming ? pump.Report : null);
             if (!closing) ProgressCount("chats");
@@ -65,7 +65,7 @@ public sealed partial class Buddy
         {
             // The relationship card is written from the main pet's side; with the main pet as the second of the scene it is read the other way round.
             var card = Adventure.Pair(first.Id, second.Id); string relation = second.Id == CharacterId ? card.Context(second.Name, first.Name) : card.Context(first.Name, second.Name);
-            var backdrops = Stage.State.AutoBackdrop ? Stage.State.Backdrops.Select(b => b.Title).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() : Array.Empty<string>();
+            var backdrops = Stage.State.AutoBackdrop ? Stage.Backdrops.Select(b => b.Title).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() : Array.Empty<string>();
             var cast = new PairCast(first.Persona, second.Persona, StageTags.Names(Stage.Set(first.Id).Sprites), StageTags.Names(Stage.Set(second.Id).Sprites), relation, backdrops, Stage.CurrentTitle);
             PairLine? authored = kind is PairStageTalk.AsFirst or PairStageTalk.AsSecond && text.Trim().Length > 0 ? new PairLine(kind == PairStageTalk.AsSecond, text.Trim()) : null;
             string state = Pref.Awareness.Clock ? DayClock.Rough(DateTime.Now) : "";

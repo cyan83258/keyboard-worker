@@ -170,6 +170,17 @@ public static class StageTests
         Check(Enumerable.Range(1, 6).All(stage => !Affection.Tone(stage).Contains("다정") && !Affection.Tone(stage).Contains("애정")) && Affection.Context(600).Contains("성격은 바뀌지 않습니다") && !PairMood.Context(new PairMoodState { Sulking = "a", SulkingDay = "d" }, "a", "비", "d").Contains("귀엽"), "Closeness and sulking are described without prescribing a sweet tone");
         var cold = new AppInFront("x", "", "게임", "game"); var work = new AppInFront("y", "", "메모장", "work");
         Check(AppKinds.Instruction(cold).Contains("성격과 말투 그대로") && AppKinds.Instruction(work).Contains("프로필에 없는 다정함을 덧붙이지 마세요") && !AppKinds.Instruction(work).Contains("칭찬하거나 격려해 주세요") && DialogueModes.Rules["응원"].Contains("퉁명스러운 캐릭터는 퉁명스럽게"), "Remarks about programs and the cheering mode follow the character's own manner");
+        // Backgrounds that come with the program
+        string shipped = Path.Combine(home, "shipped"); Directory.CreateDirectory(Path.Combine(shipped, "거리")); Directory.CreateDirectory(Path.Combine(home, "own"));
+        File.Copy(back, Path.Combine(shipped, "city_morning.jpg")); File.Copy(back, Path.Combine(shipped, "거리", "street_night.JPG")); File.Copy(kept, Path.Combine(shipped, "거리", "비 오는 골목-2.png")); File.WriteAllText(Path.Combine(shipped, "readme.txt"), "not a picture");
+        var builtIn = StageBook.ReadBuiltIn(shipped);
+        Check(builtIn.Select(b => b.Title).OrderBy(n => n).SequenceEqual(new[] { "city morning", "street night", "비 오는 골목" }.OrderBy(n => n)) && builtIn.Single(b => b.Title == "city morning").Group == StageBook.BuiltInGroup && builtIn.Where(b => b.Title != "city morning").All(b => b.Group == "거리") && StageBook.ReadBuiltIn(Path.Combine(home, "nothing-here")).Length == 0, "Pictures in the program's backgrounds folder are titled by their file names and grouped by their folders; other files are ignored");
+        var withShipped = new StageBook(Path.Combine(home, "own"), shipped); var mineOnly = withShipped.AddBackdrop("내 방", StageBook.BuiltInGroup, back);
+        Check(withShipped.Backdrops.Count == 4 && withShipped.State.Backdrops.Count == 1 && withShipped.Backdrops[0].Title == "내 방" && mineOnly.Group == "" && withShipped.Titled("STREET NIGHT")!.Path.EndsWith("street_night.JPG") && withShipped.Groups.Contains("거리") && withShipped.Groups.Contains(StageBook.BuiltInGroup) && StageBook.IsBuiltIn(withShipped.Titled("city morning")!) && !StageBook.IsBuiltIn(mineOnly), "They are offered beside the user's own backgrounds, found by title like any other, and kept apart from them");
+        withShipped.State.Backdrop = withShipped.Titled("street night")!.Path; withShipped.Save(); OrderedStore.FlushAsync().GetAwaiter().GetResult();
+        var shippedAgain = new StageBook(Path.Combine(home, "own"), shipped);
+        Check(shippedAgain.CurrentTitle == "street night" && shippedAgain.State.Backdrops.Single().Title == "내 방" && !StageBook.Files(shippedAgain.State).Any(p => p.Contains("shipped")), "A built-in background can be the one on show; only the user's own are saved in the file");
+        Check(new StageBook(Path.Combine(home, "own"), Path.Combine(home, "nothing-here")).State.Backdrop == "" && StageBook.BuiltIn.Count == 0, "Without the folder there are none, and a choice that pointed at one is cleared");
         return count;
     }
 }

@@ -35,4 +35,7 @@ if ($Smoke) {
 $app = Join-Path $root 'app'
 New-Item -ItemType Directory -Force $app | Out-Null
 foreach ($name in $programFiles) { Copy-Item (Join-Path $out $name) (Join-Path $app $name) -Force }
+# Backgrounds that come with the program (Assets\Backgrounds): the app copy holds exactly what the build holds.
+$pictures = Join-Path $app 'backgrounds'; if (Test-Path $pictures) { [IO.Directory]::Delete($pictures, $true) }
+if (Test-Path (Join-Path $out 'backgrounds')) { Copy-Item (Join-Path $out 'backgrounds') $pictures -Recurse -Force }
 Write-Host "app\ updated: $((Get-Item (Join-Path $app 'KeyboardWorker.dll')).LastWriteTime)"

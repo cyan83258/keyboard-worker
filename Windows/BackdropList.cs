@@ -47,13 +47,13 @@ public sealed class BackdropList : StackPanel
     }
     void Refresh()
     {
-        var state = buddy.Stage.State; StageParts.Retitle(heading, $"미리보기 ({state.Backdrops.Count}/{StageBook.MaxBackdrops}장)");
-        string picked = into.SelectedItem as string ?? Loose; var names = new[] { Loose }.Concat(buddy.Stage.Groups.Where(g => g.Length > 0)).ToArray(); into.ItemsSource = names; into.SelectedItem = names.Contains(picked) ? picked : Loose;
+        var state = buddy.Stage.State; StageParts.Retitle(heading, $"미리보기 (내 배경 {state.Backdrops.Count}/{StageBook.MaxBackdrops}장" + (StageBook.BuiltIn.Count > 0 ? $" · 기본 제공 {StageBook.BuiltIn.Count}장)" : ")"));
+        string picked = into.SelectedItem as string ?? Loose; var names = new[] { Loose }.Concat(state.Backdrops.Select(b => b.Group).Where(g => g.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)).ToArray(); into.ItemsSource = names; into.SelectedItem = names.Contains(picked) ? picked : Loose;
         groups.Children.Clear(); built = !state.FoldBackdrops; if (!built) return;
-        if (state.Backdrops.Count == 0) groups.Children.Add(Pastel.Text("아직 넣은 배경이 없어요. 없으면 테마 색 바탕이 보여요.", 13));
+        if (buddy.Stage.Backdrops.Count == 0) groups.Children.Add(Pastel.Text("아직 넣은 배경이 없어요. 없으면 테마 색 바탕이 보여요.", 13));
         foreach (string group in buddy.Stage.Groups)
         {
-            var members = state.Backdrops.Where(b => string.Equals(b.Group, group, StringComparison.OrdinalIgnoreCase)).ToArray(); var cards = new WrapPanel(); string key = group;
+            var members = buddy.Stage.Backdrops.Where(b => string.Equals(b.Group, group, StringComparison.OrdinalIgnoreCase)).ToArray(); var cards = new WrapPanel(); string key = group;
             var title = StageParts.Fold((group.Length == 0 ? Loose : "📁 " + group) + " (" + members.Length + ")", cards, folded.Contains(key), now => { if (now) folded.Add(key); else { folded.Remove(key); if (cards.Children.Count == 0) Fill(cards, members); } });
             title.FontSize = 13; title.Margin = new Thickness(6, 8, 0, 0); groups.Children.Add(title); groups.Children.Add(cards);
             if (!folded.Contains(key)) Fill(cards, members);
@@ -67,6 +67,12 @@ public sealed class BackdropList : StackPanel
             bool used = string.Equals(state.Backdrop, backdrop.Path, StringComparison.OrdinalIgnoreCase); var card = new StackPanel { Width = 160, Margin = new Thickness(6, 6, 6, 6) };
             var picture = StageParts.Thumbnail(backdrop.Path, false, 160, 96); picture.Cursor = System.Windows.Input.Cursors.Hand; picture.ToolTip = "이 배경으로 바꾸기"; if (used) { picture.BorderBrush = Pastel.Hot; picture.BorderThickness = new Thickness(3); }
             picture.MouseLeftButtonUp += (_, _) => { state.Backdrop = backdrop.Path; buddy.Stage.Save(); Refresh(); };
+            // A background that came with the program is only chosen, not edited: its title is its file name.
+            if (StageBook.IsBuiltIn(backdrop))
+            {
+                card.Children.Add(picture); card.Children.Add(new TextBlock { Text = backdrop.Title, Foreground = Pastel.Ink, FontSize = 12, FontWeight = FontWeights.Bold, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(2, 5, 0, 0), ToolTip = "프로그램에 들어 있는 배경 · AI가 이 이름으로 고릅니다" });
+                card.Children.Add(new TextBlock { Text = used ? "사용 중" : "", Foreground = Pastel.Hot, FontWeight = FontWeights.Bold, FontSize = 12, Margin = new Thickness(2, 2, 0, 0) }); cards.Children.Add(card); continue;
+            }
             var title = StageParts.Field(backdrop.Title, "제목 (AI가 이 이름으로 고릅니다)"); var folder = StageParts.Field(backdrop.Group, "폴더 (비우면 분류 없음)");
             title.LostFocus += (_, _) => { string cleaned = StageTags.Clean(title.Text, "배경"); if (cleaned != backdrop.Title) { backdrop.Title = cleaned; buddy.Stage.Save(); say("제목을 '" + cleaned + "'(으)로 바꿨어요."); } title.Text = backdrop.Title; };
             folder.LostFocus += (_, _) => { string cleaned = SafeFiles.OneLine(folder.Text, 20); if (cleaned != backdrop.Group) { backdrop.Group = cleaned; buddy.Stage.Save(); say(cleaned.Length == 0 ? "폴더에서 뺐어요." : "'" + cleaned + "' 폴더로 옮겼어요."); Dispatcher.BeginInvoke(Refresh); } };

@@ -1,0 +1,7 @@
+﻿이 폴더에 넣은 PNG / JPG 그림은 프로그램에 기본 배경으로 들어갑니다.
+
+- 파일 이름이 제목입니다. AI가 이 제목을 보고 장면에 맞는 배경을 고릅니다.
+  예) street_night.jpg -> "street night",  city_morning.jpg -> "city morning",  교실_저녁.jpg -> "교실 저녁"
+- 폴더를 만들어 넣으면 그 폴더 이름으로 묶입니다. 예) 거리\street_night.jpg
+- 권장: 가로 1920px 이하의 JPG (한 장에 수백 KB). 이 폴더는 GitHub에 공개되고 배포 파일에 들어가므로, 직접 만들었거나 배포해도 되는 그림만 넣으세요.
+- 넣은 뒤 tools\build-app.ps1 을 실행하면 app\backgrounds 에 반영됩니다.

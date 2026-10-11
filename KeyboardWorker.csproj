@@ -24,5 +24,8 @@
   </PropertyGroup>
   <ItemGroup><InternalsVisibleTo Include="KeyboardWorker.Tests" /></ItemGroup>
   <ItemGroup><AssemblyMetadata Include="UpdateRepository" Value="$(UpdateRepository)" /></ItemGroup>
+  <!-- Backgrounds that come with the program: every PNG / JPG under Assets\Backgrounds is copied to "backgrounds" next to it.
+       The file name is the title the AI chooses by (street_night.jpg -> "street night"); a subfolder is a group. -->
+  <ItemGroup><Content Include="Assets\Backgrounds\**\*.png;Assets\Backgrounds\**\*.jpg;Assets\Backgrounds\**\*.jpeg" Link="backgrounds\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="Assets\pet.ico" LogicalName="KeyboardWorker.pet.ico" Condition="Exists('Assets\pet.ico')" /></ItemGroup>
 </Project>
