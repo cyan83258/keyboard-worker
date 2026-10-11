@@ -54,6 +54,8 @@ public static class Updater
         if (!Configured) throw new InvalidOperationException("이 프로그램에는 업데이트를 받아 올 주소가 아직 정해져 있지 않습니다.");
         try { return ParseRelease(await Downloader.Text($"https://api.github.com/repos/{Repository}/releases/latest", 1024 * 1024, cancellation)); }
         catch (JsonException) { throw new InvalidOperationException("업데이트 정보를 읽지 못했습니다."); }
+        // GitHub answers 404 while the repository has no published release.
+        catch (InvalidOperationException e) when (e.Message.Contains("(404)")) { throw new InvalidOperationException("아직 공개된 버전이 없습니다."); }
     }
     // Downloads the package into the settings folder's updates folder and checks it against what GitHub says it should be.
     public static async Task<string> Download(ReleaseInfo release, string root, Action<long, long?>? progress, CancellationToken cancellation)

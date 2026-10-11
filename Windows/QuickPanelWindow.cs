@@ -36,6 +36,7 @@ public static class QuickToggles
         new("through", Motion, "마우스 클릭 통과", b => b.Pref.ClickThrough, (p, v) => p.ClickThrough = v),
         new("locked", Motion, "위치 고정", b => b.Pref.Locked, (p, v) => p.Locked = v),
         new("fullscreen", Motion, "전체 화면에서 숨기기", b => b.Pref.HideFullscreen, (p, v) => p.HideFullscreen = v),
+        new("notes", Shown, "설명 글 펼쳐 보기 (? 대신 글로)", b => b.Pref.ShowNotes, (p, v) => p.ShowNotes = v),
         new("game-light", Motion, "게임 중 가볍게", b => b.Pref.Awareness.GameLight, (p, v) => p.Awareness = p.Awareness with { GameLight = v })
     };
     public static QuickToggle? Find(string key) => All.FirstOrDefault(t => t.Key == key);

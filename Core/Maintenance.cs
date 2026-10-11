@@ -11,6 +11,7 @@ namespace KeyboardWorker;
 //   --install-sound-presets a b  add sound files as presets
 //   --repair-selected-companion  switch the saved second pet back on
 //   --music-probe                list the browser media sessions Windows reports
+//   --update-probe               ask GitHub for the newest release of this program and report what the update button would see
 //   --make-icon [folder]         regenerate Assets\pet.ico
 //   --ai-probe [name]            send one tiny request per saved AI connection, plain and with reasoning effort / verbosity, and report what each server accepts
 // Tasks that change the user's files refuse to run while the app itself is running, and write a short report next to the program.
@@ -30,6 +31,7 @@ public static class Maintenance
         if (args.Contains("--image-diet")) { Exclusive("image-diet-result.txt", ImageFolderDiet); return true; }
         if (args.Contains("--clean-unused")) { Exclusive("clean-unused-result.txt", CleanUnused); return true; }
         if (args.Contains("--ai-probe")) { File.WriteAllLines(Beside("ai-probe.txt"), Wait(System.Threading.Tasks.Task.Run(() => AiProbe(args.SkipWhile(a => a != "--ai-probe").Skip(1).FirstOrDefault() ?? "")))); return true; }
+        if (args.Contains("--update-probe")) { File.WriteAllLines(Beside("update-probe.txt"), Wait(System.Threading.Tasks.Task.Run(UpdateProbe))); return true; }
         if (args.Contains("--make-icon")) { PetIcon.Generate(args.Length > 1 ? args[1] : Beside("Assets")); return true; }
         return false;
     }
@@ -64,6 +66,13 @@ public static class Maintenance
                 lines.Add($"{connection.Name} ({connection.Format}, {connection.Model}) · {label}: {result}");
             }
         }
+        return lines.ToArray();
+    }
+    static async System.Threading.Tasks.Task<string[]> UpdateProbe()
+    {
+        var lines = new System.Collections.Generic.List<string> { "this version: " + AppInfo.Version, "update address: " + (Updater.Configured ? Updater.Repository : "(none)") };
+        try { var release = await Updater.Check(CancellationToken.None); lines.Add($"latest release: {release.Tag} · {release.AssetName} · {release.Size} bytes · checksum {(release.Sha256.Length > 0 ? "yes" : "no")} · newer than this: {Updater.Newer(release, AppInfo.Version)}"); }
+        catch (Exception e) { lines.Add("check: " + SafeFiles.OneLine(e.Message, 300)); }
         return lines.ToArray();
     }
     static void RepairCompanion()

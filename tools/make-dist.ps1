@@ -12,6 +12,9 @@ $zip = Join-Path $root 'dist\KeyboardWorker-win-x64.zip'
 dotnet publish (Join-Path $root 'KeyboardWorker.csproj') -c Release -r win-x64 --self-contained true -p:DebugType=none -p:DebugSymbols=false -p:SatelliteResourceLanguages=ko -o $folder --nologo -v q
 if ($LASTEXITCODE -ne 0) { Write-Host 'Publish failed.'; exit 1 }
 
+# The note for the person who unpacks it.
+Copy-Item (Join-Path $PSScriptRoot '읽어주세요.txt') (Join-Path $folder '읽어주세요.txt') -Force
+
 # Only program files may be in the package.
 $unexpected = Get-ChildItem $folder -Recurse -File | Where-Object { -not ($_.FullName -like (Join-Path $folder 'backgrounds\*') -and $_.Extension -in '.png', '.jpg', '.jpeg') -and $_.Extension -notin '.dll', '.exe' -and $_.Name -notin 'KeyboardWorker.deps.json', 'KeyboardWorker.runtimeconfig.json', '읽어주세요.txt' }
 if ($unexpected) { Write-Host 'Unexpected files in the package:'; $unexpected | ForEach-Object { Write-Host "  $($_.FullName)" }; exit 1 }

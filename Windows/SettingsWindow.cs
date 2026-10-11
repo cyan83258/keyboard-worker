@@ -101,10 +101,12 @@ public sealed class SettingsWindow : Window
             var arrow = new TextBlock { Text = "›", Foreground = Pastel.Hot, FontWeight = FontWeights.Bold, FontSize = 16, Margin = new Thickness(6, -3, 0, 0) };
             DockPanel.SetDock(arrow, Dock.Right);
             heading.Children.Add(arrow);
+            // What the tile opens is told by its "?"; written out only when explanations are set to show.
+            if (!Pastel.ShowNotes) { var what = Pastel.Help(help); what.Margin = new Thickness(6, 0, 0, 0); what.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(what, Dock.Right); heading.Children.Add(what); }
             heading.Children.Add(new TextBlock { Text = title, Foreground = Pastel.Ink, FontWeight = FontWeights.Bold, FontSize = 14, TextTrimming = TextTrimming.CharacterEllipsis });
             var body = new StackPanel();
             body.Children.Add(heading);
-            body.Children.Add(new TextBlock { Text = help, Foreground = Pastel.Ink, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0), Opacity = .85 });
+            if (Pastel.ShowNotes) body.Children.Add(new TextBlock { Text = help, Foreground = Pastel.Ink, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0), Opacity = .85 });
             if (origin != null) body.Children.Add(new TextBlock { Text = origin, Foreground = Pastel.Teal, FontSize = 11, Margin = new Thickness(0, 4, 0, 0) });
             var tile = new Border
             {
@@ -341,7 +343,7 @@ public sealed class SettingsWindow : Window
         timer.Start(); Closed += (_, _) => timer.Stop();
     }
     void Heading(string text) => activePanel.Children.Add(new TextBlock { Text = text, Foreground = Pastel.Hot, FontSize = 20, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 18, 0, 10) });
-    void Label(string text) => activePanel.Children.Add(new TextBlock { Text = text, Foreground = Pastel.Ink, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 6) });
+    void Label(string text) => activePanel.Children.Add(text.Length >= Pastel.NoteLength ? Pastel.Text(text, 13) : new TextBlock { Text = text, Foreground = Pastel.Ink, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 6) });
     CheckBox Check(string text, bool value) { var c = new CheckBox { Content = text, IsChecked = value, Margin = new Thickness(0, 6, 0, 6) }; activePanel.Children.Add(c); return c; }
     TextBox Number(string text, int value) { Label(text); var box = new TextBox { Text = value.ToString(), Margin = new Thickness(0, 0, 0, 8), Padding = new Thickness(6) }; activePanel.Children.Add(box); return box; }
     Slider Slider(string text, int min, int max, int value)

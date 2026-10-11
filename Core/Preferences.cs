@@ -59,6 +59,8 @@ public sealed class Preferences
     public string BubbleFontPath { get; set; } = "";
     public string StageFontPath { get; set; } = "";
     public int StageFontSize { get; set; } = 16;
+    // Explanations in the windows are written out in full instead of folded into "?" marks.
+    public bool ShowNotes { get; set; }
     // One line the user wants to keep in sight, shown under the pet.
     public string Todo { get; set; } = "";
     public bool ShowTodo { get; set; } = true;

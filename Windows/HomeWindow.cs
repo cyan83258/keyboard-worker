@@ -181,13 +181,13 @@ public sealed class HomeWindow : Window
         shop.Children.Clear();
         void Try(Action buy, string done) { try { buy(); status.Text = done; } catch (Exception e) { status.Text = e.Message; } }
         var items = Box(shop, "장식 아이템", true, ("장식 상점 · 옷장 열기", buddy.OpenGame));
-        items.Children.Add(Line($"리본, 안경, 오라 같은 장식을 사서 입혀요. 가진 것 {buddy.Game.State.Owned.Count}/{buddy.Game.Catalog.Length}개 · 직접 만든 장비는 무료예요."));
+        items.Children.Add(Line($"가진 것 {buddy.Game.State.Owned.Count}/{buddy.Game.Catalog.Length}개")); items.Children.Add(Pastel.Text("리본, 안경, 오라 같은 장식을 코인으로 사서 캐릭터에게 입혀요. 직접 만든 장비는 무료로 등록할 수 있어요.", 12));
         var bagged = buddy.Adventure.State.GiftBag;
         var gifts = Box(shop, "선물 뽑기", false, ($"뽑으러 가기 · 1번 {GiftShop.DrawCost}코인", () => buddy.OpenGifts(0)), ("내 선물 가방", () => buddy.OpenGifts(1)), ("선물 도감", () => buddy.OpenGifts(2)));
-        gifts.Children.Add(Line($"코인으로 선물을 뽑아 모았다가 캐릭터 페이지에서 건네요. ★부터 ★★★★★까지, 귀할수록 친밀도가 많이 올라요.\n가방에 {bagged.Values.Sum()}개 · 만난 선물 {buddy.Adventure.State.GiftsMet.Count}/{GiftShop.All.Length}종"));
+        gifts.Children.Add(Pastel.Text("코인으로 선물을 뽑아 가방에 모았다가 캐릭터 페이지에서 건네요. ★부터 ★★★★★까지, 귀할수록 친밀도가 많이 올라요.", 12)); gifts.Children.Add(Line($"가방에 {bagged.Values.Sum()}개 · 만난 선물 {buddy.Adventure.State.GiftsMet.Count}/{GiftShop.All.Length}종"));
 
         var packs = Box(shop, "대사 팩", false, ("대사집 열기 (산 팩 넣기)", buddy.OpenLineBook));
-        packs.Children.Add(Line("한 가지 말투로 묶은 대사 모음이에요. 한 번 사면 어느 캐릭터의 대사집에든 넣고 고칠 수 있어요.", 12));
+        packs.Children.Add(Pastel.Text("한 가지 말투로 묶은 대사 모음이에요. 한 번 사면 어느 캐릭터의 대사집에든 넣고 고칠 수 있어요.", 12));
         foreach (var pack in LinePacks.All)
         {
             bool owned = buddy.OwnsPack(pack); var row = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };

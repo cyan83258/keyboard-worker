@@ -18,7 +18,7 @@ namespace KeyboardWorker;
 public sealed partial class Buddy : Window, IPetAnchor
 {
     // The theme is chosen here, before any other field builds a themed control.
-    public Preferences Pref { get; private set; } = StartupTrace.Time("설정", () => { var saved = Storage.Load(); Pastel.Use(Program.ThemeOverride ?? saved.Theme); return saved; });
+    public Preferences Pref { get; private set; } = StartupTrace.Time("설정", () => { var saved = Storage.Load(); Pastel.Use(Program.ThemeOverride ?? saved.Theme); Pastel.ShowNotes = saved.ShowNotes; return saved; });
     readonly Activity activity = new(Environment.TickCount64);
     readonly TypingAudio audio = new();
     readonly DispatcherTimer clock = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -405,7 +405,7 @@ public sealed partial class Buddy : Window, IPetAnchor
         reactionLimiter.Reset();
         bodyLimiter.Reset();
         bounce.Configure(p.Desktop.TypingBounce); bounce.LowPower = p.LowPower;
-        Work.Suspend(); Pref = p; body.Margin = p.Desktop.TypingBounce ? new Thickness(10, 18, 10, 8) : new Thickness(0);
+        Work.Suspend(); Pref = p; Pastel.ShowNotes = p.ShowNotes; body.Margin = p.Desktop.TypingBounce ? new Thickness(10, 18, 10, 8) : new Thickness(0);
         body.Width = p.Size + 60; body.Height = p.Size;
         Width = p.Size + 60 + body.Margin.Left + body.Margin.Right; RefreshTodo(); ResizePet(); Topmost = true; Native.RaisePet(hwnd);
         quickButton.Visibility = p.Desktop.QuickButton ? Visibility.Visible : Visibility.Collapsed; workBackground.Visibility = p.Desktop.ShowWorkOnPet ? Visibility.Visible : Visibility.Collapsed;

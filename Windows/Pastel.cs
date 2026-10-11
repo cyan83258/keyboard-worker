@@ -537,11 +537,38 @@ public static class Pastel
     }
 
     // Big text (titles) turns hot pink + bold, like "ATTENTION!" / "404 ERROR" in the sample.
-    public static TextBlock Text(string text, double size = 14) => new()
+    public static TextBlock Text(string text, double size = 14)
     {
-        Text = text, TextWrapping = TextWrapping.Wrap, FontSize = size, Margin = new Thickness(0, 4, 0, 8),
-        Foreground = size >= 20 ? Hot : Ink, FontWeight = size >= 20 ? FontWeights.Bold : FontWeights.Normal
-    };
+        var block = new TextBlock
+        {
+            Text = text, TextWrapping = TextWrapping.Wrap, FontSize = size, Margin = new Thickness(0, 4, 0, 8),
+            Foreground = size >= 20 ? Hot : Ink, FontWeight = size >= 20 ? FontWeights.Bold : FontWeights.Normal
+        };
+        // A long text in small print is an explanation: it is folded into a "?" that shows it on hover, so windows stay calm.
+        // Labels, headings and texts that are filled in later (status lines, counts) are short or empty here and stay as they are.
+        if (!ShowNotes && size <= 14 && text.Length >= NoteLength) { block.Text = ""; block.Inlines.Add(new System.Windows.Documents.InlineUIContainer(Help(text))); block.Margin = new Thickness(0, 1, 0, 5); }
+        return block;
+    }
+    // Explanations are written out in full instead of folded (a setting; applies to windows opened afterwards).
+    public static bool ShowNotes { get; set; }
+    public const int NoteLength = 40;
+    // The small translucent "?" that shows an explanation while the mouse is on it.
+    public static FrameworkElement Help(string text)
+    {
+        var tip = new ToolTip
+        {
+            Content = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 400, Foreground = Ink, FontSize = 13, LineHeight = 20 },
+            Background = Paper, BorderBrush = Line, BorderThickness = new Thickness(1.5), Padding = new Thickness(12, 8, 12, 9)
+        };
+        var badge = new Border
+        {
+            Width = 17, Height = 17, CornerRadius = new CornerRadius(9), Background = Line, Opacity = .38, Cursor = System.Windows.Input.Cursors.Help, ToolTip = tip, SnapsToDevicePixels = true,
+            Child = new TextBlock { Text = "?", Foreground = Brushes.White, FontSize = 11, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, -1, 0, 0) }
+        };
+        ToolTipService.SetInitialShowDelay(badge, 120); ToolTipService.SetShowDuration(badge, 60000); ToolTipService.SetBetweenShowDelay(badge, 0);
+        badge.MouseEnter += (_, _) => badge.Opacity = .9; badge.MouseLeave += (_, _) => badge.Opacity = .38;
+        return badge;
+    }
 
     // Sticker-like card: plum outline with a thicker bottom-right edge for a 3D pop.
     public static Border Card(UIElement child, bool blue = false) => new()
