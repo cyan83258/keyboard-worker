@@ -34,6 +34,7 @@ public sealed class AiClient
             foreach (var t in history) { messages.Add(new { role = "user", parts = new[] { new { text = t.User } } }); messages.Add(new { role = "model", parts = new[] { new { text = t.Assistant } } }); }
             messages.Add(new { role = "user", parts = new[] { new { text } } });
             var generation = new Dictionary<string, object> { ["maxOutputTokens"] = maxTokens };
+            // Unless the user chose a reasoning effort, these two answer without thinking first (short lines need none).
             if (c.Model.Trim() is "gemini-2.5-flash" or "gemini-2.5-flash-lite") generation["thinkingConfig"] = new { thinkingBudget = 0 };
             payload = new { systemInstruction = new { parts = new[] { new { text = system } } }, contents = messages, generationConfig = generation };
         }
@@ -44,7 +45,10 @@ public sealed class AiClient
             messages.Add(new { role = "user", content = text });
             payload = c.Format == "Responses" ? (object)new { model = c.Model.Trim(), instructions = system, input = messages, max_output_tokens = maxTokens, store = false, stream = streaming } : new { model = c.Model.Trim(), messages, max_tokens = maxTokens, stream = streaming };
         }
-        var request = new HttpRequestMessage(HttpMethod.Post, uri) { Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json") };
+        // The connection's own parameters (sampling, reasoning effort, what the user added or took out) go in last.
+        var body = JsonSerializer.SerializeToNode(payload)!.AsObject(); var parameters = c.Parameters ?? new(); AiRequestOptions.Apply(body, c.Format, c.Model.Trim(), parameters);
+        var request = new HttpRequestMessage(HttpMethod.Post, uri) { Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json") };
+        AiRequestOptions.AddHeaders(request, parameters);
         if (streaming) request.Headers.Accept.Add(new("text/event-stream"));
         if (key.Length > 0 && c.Header.Length > 0)
         {
@@ -111,17 +115,34 @@ public sealed class AiClient
             }
         }
     }
+    // The message in an error answer, shortened to one line; "" when there is none.
+    public static string Explain(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body) || body.Length > 200000) return "";
+        try
+        {
+            using var json = JsonDocument.Parse(body); var root = json.RootElement; if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0) root = root[0];
+            if (root.ValueKind != JsonValueKind.Object) return "";
+            string text = root.TryGetProperty("error", out var error) ? error.ValueKind == JsonValueKind.String ? error.GetString() ?? "" : error.ValueKind == JsonValueKind.Object && error.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String ? message.GetString() ?? "" : ""
+                : root.TryGetProperty("message", out var plain) && plain.ValueKind == JsonValueKind.String ? plain.GetString() ?? "" : "";
+            return SafeFiles.OneLine(text, 240);
+        }
+        catch (JsonException) { return ""; }
+    }
     async Task<string> SendOnce(ChatPreferences settings, ChatTurn[] history, string text, int tokens, CancellationToken cancellation, Action<string>? progress)
     {
         var c = settings.Current;
         bool streaming = settings.Streaming && progress != null;
-        using var request = Build(c, SecretVault.Unprotect(c.Secret), CharacterPrompt.Build(settings.Profile), history, text, tokens, streaming);
+        string system = CharacterPrompt.Build(settings.Profile); history = AiRequestOptions.Fit(history, system, text, settings.MaxContextTokens, tokens);
+        using var request = Build(c, SecretVault.Unprotect(c.Secret), system, history, text, tokens, streaming);
         using var usage = trackUsage ? AiUsage.Current.Begin(settings.Budget, settings.UsageKind, tokens) : null;
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellation).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             string reason = (int)response.StatusCode switch { 401 or 403 => "API 키 또는 모델 이용 권한을 확인해 주세요.", 429 => "요청 한도 또는 잔액을 확인한 뒤 다시 시도해 주세요.", 400 or 404 => "모델 ID, 엔드포인트와 API 형식을 확인해 주세요.", _ => "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요." };
-            throw new InvalidOperationException($"HTTP {(int)response.StatusCode} · {reason}");
+            // What the server said is usually the quickest way to see which parameter it did not accept.
+            string said = ""; try { said = Explain(await response.Content.ReadAsStringAsync(cancellation).ConfigureAwait(false)); } catch (Exception e) when (e is HttpRequestException or IOException or InvalidOperationException) { }
+            throw new InvalidOperationException($"HTTP {(int)response.StatusCode} · {reason}" + (said.Length > 0 ? " (서버 응답: " + said + ")" : ""));
         }
         using var stream = await response.Content.ReadAsStreamAsync(cancellation).ConfigureAwait(false);
         if (streaming && response.Content.Headers.ContentType?.MediaType == "text/event-stream")

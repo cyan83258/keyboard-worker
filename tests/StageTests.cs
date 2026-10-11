@@ -115,7 +115,7 @@ public static class StageTests
         Check(small != null && ReferenceEquals(small, again) && small!.PixelWidth == 400 && pictures.Get(wide, 900)!.PixelWidth == 1000 && pictures.Get("", 300) == null && pictures.Get(Path.Combine(art, "missing.png"), 300) == null && pictures.Get(fake, 300) == null, "A page decodes each picture once per size step, no larger than it is drawn; a missing or broken file is simply empty");
 
         // The saved sets and the shared backgrounds
-        var book = new StageBook(data); int changes = 0; book.Changed += () => changes++;
+        var book = new StageBook(data, Path.Combine(home, "no-shipped")); int changes = 0; book.Changed += () => changes++;
         book.AddSprite("a", " Smile \n", kept); book.AddSprite("a", "", cut); var first = book.AddBackdrop("내 방", "실내", back);
         Check(book.Set("a").Sprites.Select(s => s.Tag).SequenceEqual(new[] { "Smile", "기본" }) && book.State.Backdrop == back && book.CurrentTitle == "내 방" && book.Set("b").Sprites.Count == 0 && changes == 3 && book.State.AutoBackdrop, "Standing pictures are kept per character; backgrounds are shared, and the first one is put on show");
         book.AddBackdrop("교실", "학교", back + "2"); book.AddBackdrop("운동장", "학교", back + "3"); book.AddBackdrop(" ", "", back + "4");
@@ -125,7 +125,7 @@ public static class StageTests
         Check(Throws(() => book.AddSprite("a", "over", kept)) && Throws(() => book.AddBackdrop("over", "", "one-more.jpg")) && book.Set("a").Sprites.Count == 40 && book.State.Backdrops.Count == 60, "There is room for 40 standing pictures per character and 60 backgrounds");
         book.Set("a").Sprites.RemoveRange(2, 38); book.State.Backdrops.RemoveRange(2, 58); book.Set("a").Sprites.Add(new StageSprite { Tag = "원격", Path = @"\\evil\share\x.png" }); book.State.Backdrops.Add(new StageBackdrop { Title = "원격", Path = "//evil/b.jpg" });
         book.State.Backdrop = "gone.jpg"; book.State.AutoBackdrop = false; book.State.FoldBackdrops = true; book.Save(); OrderedStore.FlushAsync().GetAwaiter().GetResult();
-        var loaded = new StageBook(data);
+        var loaded = new StageBook(data, Path.Combine(home, "no-shipped"));
         Check(loaded.Set("a").Sprites.Count == 2 && loaded.Set("a").Sprites[0].Path == kept && loaded.State.Backdrops.Select(b => b.Title).SequenceEqual(new[] { "내 방", "교실" }) && loaded.State.Backdrops[0].Group == "실내" && loaded.State.Backdrop == "" && !loaded.State.AutoBackdrop && loaded.State.FoldBackdrops && !loaded.State.FoldSprites, "Everything is saved; network paths are dropped and a background that is no longer listed is not on show");
         Check(StageBook.Files(loaded.State).OrderBy(p => p).SequenceEqual(new[] { kept, cut, back, back + "2" }.OrderBy(p => p)) && !StageBook.Files(null).Any(), "Every file a page uses can be listed");
         foreach (string path in new[] { kept, cut, back, wide }) File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-3));

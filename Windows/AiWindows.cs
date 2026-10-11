@@ -16,6 +16,10 @@ public sealed class ConnectionsWindow : Window
     readonly PasswordBox key = new();
     readonly CheckBox bearer = new() { Content = "인증 값 앞에 Bearer 붙이기" };
     readonly Expander advanced = new() { Header = "요청 주소 · API 형식 · 인증 옵션", Margin = new Thickness(0, 12, 0, 12) };
+    // The finer parameters of the chosen connection, folded away until wanted.
+    readonly Expander fine = new() { Header = "세부 파라미터 · 온도 · 반복 억제 · 추론 강도 · 추가 본문과 헤더", Margin = new Thickness(0, 0, 0, 12) };
+    readonly AiParameterPanel parameters = new();
+    readonly TextBox contextSize = new() { MaxLength = 7 }, responseSize = new() { MaxLength = 5 };
     readonly TextBlock status = Pastel.Text("");
     int index;
     bool loading;
@@ -28,7 +32,8 @@ public sealed class ConnectionsWindow : Window
         p.Children.Add(connections);
         var actions = new WrapPanel(); actions.Children.Add(Pastel.Button("+ 직접 연결 추가", () =>
         {
-            Capture(); if (draft.Connections.Count >= 20) { status.Text = "연결은 최대 20개까지 만들 수 있어요."; return; }
+            try { Capture(); } catch (InvalidOperationException e) { status.Text = e.Message; return; }
+            if (draft.Connections.Count >= 20) { status.Text = "연결은 최대 20개까지 만들 수 있어요."; return; }
             draft.Connections.Add(new AiConnection { Name = "직접 연결 " + (draft.Connections.Count + 1), Format = "Chat Completions", Endpoint = "http://localhost:1234/v1/chat/completions", Model = "", Header = "Authorization", Bearer = true });
             index = draft.Connections.Count - 1; Refresh();
         }, true));
@@ -38,6 +43,13 @@ public sealed class ConnectionsWindow : Window
         var options = new StackPanel { Margin = new Thickness(10) }; Field(options, "API 응답 형식", format); Field(options, "전체 요청 엔드포인트 URL", endpoint);
         options.Children.Add(Pastel.Text("Gemini URL에는 {model}을 사용할 수 있어요. 직접 연결은 위 세 형식 중 하나를 지원해야 합니다.", 12));
         Field(options, "인증 헤더 이름", header); options.Children.Add(bearer); advanced.Content = options; p.Children.Add(advanced);
+        // Sizes in tokens apply to every connection; the fold below belongs to the chosen one.
+        var sizes = new System.Windows.Controls.Primitives.UniformGrid { Columns = 2 };
+        void Size(string title, TextBox box, string hint) { var cell = new StackPanel { Margin = new Thickness(0, 0, 12, 4) }; cell.Children.Add(Pastel.Text(title)); cell.Children.Add(box); cell.Children.Add(Pastel.Text(hint, 11)); sizes.Children.Add(cell); }
+        Size("최대 컨텍스트 크기 (토큰)", contextSize, "한 번에 보내는 양의 한도. 넘으면 오래된 대화부터 뺍니다. 0 = 제한 없음.");
+        Size("최대 응답 길이 (토큰)", responseSize, "답변 하나의 한도 (100~16000). 캐릭터 프로필의 '답변 출력 한도'와 같은 값이에요.");
+        contextSize.Text = draft.MaxContextTokens.ToString(); responseSize.Text = draft.MaxOutputTokens.ToString(); p.Children.Add(sizes);
+        fine.Content = parameters; p.Children.Add(fine);
         p.Children.Add(Pastel.Text("키는 Windows 계정에 묶어 암호화해 저장합니다. 입력한 채팅과 프로필은 선택한 서버로 전송되며, 이용 요금은 해당 API 계정에 적용됩니다.", 12));
         p.Children.Add(status);
         var buttons = new WrapPanel();
@@ -62,7 +74,7 @@ public sealed class ConnectionsWindow : Window
                 using var check = AiClient.Build(draft.Current, "", "", Array.Empty<ChatTurn>(), "", draft.MaxOutputTokens);
                 var latest = ChatRepository.Clone(repo.Preferences);
                 latest.Connections = draft.Connections;
-                latest.Selected = index;
+                latest.Selected = index; latest.MaxContextTokens = draft.MaxContextTokens; latest.MaxOutputTokens = draft.MaxOutputTokens;
                 repo.Apply(latest);
                 Close();
             }
@@ -71,8 +83,13 @@ public sealed class ConnectionsWindow : Window
         p.Children.Remove(status);
         var footer = new StackPanel { Margin = new Thickness(20, 4, 20, 14) }; footer.Children.Add(status); footer.Children.Add(buttons);
         var layout = new DockPanel(); DockPanel.SetDock(footer, Dock.Bottom); layout.Children.Add(footer); layout.Children.Add(Pastel.Scroll(p));
-        Pastel.Window(this, "AI 연결", layout, 640, 760);
-        connections.SelectionChanged += (_, _) => { if (loading || connections.SelectedIndex < 0) return; Capture(); index = connections.SelectedIndex; Load(); };
+        Pastel.Window(this, "AI 연결", layout, 680, 800);
+        connections.SelectionChanged += (_, _) =>
+        {
+            if (loading || connections.SelectedIndex < 0) return;
+            try { Capture(); } catch (InvalidOperationException e) { status.Text = e.Message; loading = true; connections.SelectedIndex = index; loading = false; return; }
+            index = connections.SelectedIndex; Load();
+        };
         Refresh(); Closed += (_, _) => testing?.Cancel();
     }
     static void Field(StackPanel p, string title, UIElement box) { p.Children.Add(Pastel.Text(title)); p.Children.Add(box); }
@@ -80,6 +97,10 @@ public sealed class ConnectionsWindow : Window
     {
         var c = draft.Connections[index]; c.Name = name.Text.Trim(); c.Format = format.SelectedItem?.ToString() ?? "Chat Completions";
         c.Endpoint = endpoint.Text.Trim(); c.Model = model.Text.Trim(); c.Header = header.Text.Trim(); c.Bearer = bearer.IsChecked == true; c.Secret = SecretVault.Protect(key.Password);
+        c.Parameters = parameters.Read();
+        if (!int.TryParse(contextSize.Text.Trim(), out int context) || context < 0 || (context > 0 && context < 500) || context > 2000000) throw new InvalidOperationException("최대 컨텍스트 크기는 0(제한 없음) 또는 500~2000000 사이의 숫자로 적어 주세요.");
+        if (!int.TryParse(responseSize.Text.Trim(), out int response) || response < 100 || response > 16000) throw new InvalidOperationException("최대 응답 길이는 100~16000 사이의 숫자로 적어 주세요.");
+        draft.MaxContextTokens = context; draft.MaxOutputTokens = response;
     }
     void Refresh()
     {
@@ -88,7 +109,7 @@ public sealed class ConnectionsWindow : Window
     void Load()
     {
         var c = draft.Connections[index]; name.Text = c.Name; format.SelectedItem = c.Format; endpoint.Text = c.Endpoint; model.Text = c.Model; header.Text = c.Header; bearer.IsChecked = c.Bearer;
-        advanced.IsExpanded = index >= 4;
+        advanced.IsExpanded = index >= 4; c.Parameters ??= new(); parameters.Show(c.Parameters); fine.IsExpanded = AiParameterPanel.Any(c.Parameters);
         try { key.Password = SecretVault.Unprotect(c.Secret); } catch (Exception e) { key.Password = ""; status.Text = e.Message; }
     }
 }

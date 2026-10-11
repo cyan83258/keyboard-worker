@@ -12,6 +12,7 @@ namespace KeyboardWorker;
 //   --repair-selected-companion  switch the saved second pet back on
 //   --music-probe                list the browser media sessions Windows reports
 //   --make-icon [folder]         regenerate Assets\pet.ico
+//   --ai-probe [name]            send one tiny request per saved AI connection, plain and with reasoning effort / verbosity, and report what each server accepts
 // Tasks that change the user's files refuse to run while the app itself is running, and write a short report next to the program.
 public static class Maintenance
 {
@@ -28,6 +29,7 @@ public static class Maintenance
         if (args.Contains("--install-sound-presets")) { InstallSounds(args.SkipWhile(a => a != "--install-sound-presets").Skip(1).ToArray()); return true; }
         if (args.Contains("--image-diet")) { Exclusive("image-diet-result.txt", ImageFolderDiet); return true; }
         if (args.Contains("--clean-unused")) { Exclusive("clean-unused-result.txt", CleanUnused); return true; }
+        if (args.Contains("--ai-probe")) { File.WriteAllLines(Beside("ai-probe.txt"), Wait(System.Threading.Tasks.Task.Run(() => AiProbe(args.SkipWhile(a => a != "--ai-probe").Skip(1).FirstOrDefault() ?? "")))); return true; }
         if (args.Contains("--make-icon")) { PetIcon.Generate(args.Length > 1 ? args[1] : Beside("Assets")); return true; }
         return false;
     }
@@ -43,6 +45,27 @@ public static class Maintenance
         book.State.Friends[prefs.ActivePresetId].Discovered = true; book.Save(true); Wait(OrderedStore.FlushAsync());
     }
 
+    // Asks every connection that has a key for a one-word answer: as it is, then with a reasoning effort, with a verbosity, and with both.
+    // The saved settings are not changed and the keys are never written out; only whether each request was accepted.
+    static async System.Threading.Tasks.Task<string[]> AiProbe(string only)
+    {
+        var saved = new ChatRepository().Preferences; var lines = new System.Collections.Generic.List<string>(); using var http = new System.Net.Http.HttpClient { Timeout = Timeout.InfiniteTimeSpan }; var client = new AiClient(http);
+        for (int i = 0; i < saved.Connections.Count; i++)
+        {
+            var connection = saved.Connections[i]; if (only.Length > 0 && connection.Name != only) continue;
+            if (connection.Secret.Length == 0) { lines.Add($"{connection.Name} ({connection.Format}, {connection.Model}): no key saved, skipped"); continue; }
+            foreach (var (label, effort, verbosity) in new[] { ("as saved", null, null), ("effort low", "low", null), ("effort none", "none", null), ("verbosity low", null, "low"), ("effort high + verbosity high", "high", "high") })
+            {
+                var settings = ChatRepository.Clone(saved); settings.Selected = i; settings.Streaming = false; settings.AutoContinue = false; settings.MaxOutputTokens = 512; settings.RequestTimeoutSeconds = 60; settings.Profile = new Persona { Name = "점검", Prompts = new PromptTemplates { Profile = "짧게 답한다." } };
+                var parameters = settings.Connections[i].Parameters; if (effort != null) parameters.ReasoningEffort = effort; if (verbosity != null) parameters.Verbosity = verbosity;
+                string result; var watch = System.Diagnostics.Stopwatch.StartNew();
+                try { string answer = await client.Send(settings, Array.Empty<ChatTurn>(), "안녕? 한 단어로만 답해 줘.", CancellationToken.None); result = "OK (" + watch.ElapsedMilliseconds + " ms, " + answer.Length + " chars)"; }
+                catch (Exception e) { result = "FAILED: " + SafeFiles.OneLine(e.Message, 300); }
+                lines.Add($"{connection.Name} ({connection.Format}, {connection.Model}) · {label}: {result}");
+            }
+        }
+        return lines.ToArray();
+    }
     static void RepairCompanion()
     {
         var saved = Storage.Load(); var presets = new PresetStore();

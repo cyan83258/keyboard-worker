@@ -12,7 +12,9 @@ namespace KeyboardWorker;
 
 public sealed class AiConnection
 {
-    public AiConnection Snapshot() => (AiConnection)MemberwiseClone();
+    public AiConnection Snapshot() { var copy = (AiConnection)MemberwiseClone(); copy.Parameters = (Parameters ?? new()).Snapshot(); return copy; }
+    // Sampling, reasoning effort, verbosity and anything added to the request by hand.
+    public AiParameters Parameters { get; set; } = new();
     public string Name { get; set; } = "Gemini";
     public string Format { get; set; } = "Gemini";
     public string Endpoint { get; set; } = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent";
@@ -53,6 +55,8 @@ public sealed class ChatPreferences
     public int KeepTurns { get; set; } = 30;
     public int ContextTurns { get; set; } = 10;
     public int MaxOutputTokens { get; set; } = 2048;
+    // The most tokens a request may hold (profile, earlier turns, the new message and room for the answer); 0 = no limit. Older turns are left out first.
+    public int MaxContextTokens { get; set; }
     public int ReplyPolicyVersion { get; set; }
     public bool AutoContinue { get; set; } = true;
     public int RequestTimeoutSeconds { get; set; } = 180;
@@ -79,6 +83,8 @@ public sealed class ChatPreferences
         ReplyPolicyVersion = 1;
         MaxOutputTokens = Math.Clamp(MaxOutputTokens, 100, 16000); RequestTimeoutSeconds = Math.Clamp(RequestTimeoutSeconds, 30, 600); Profile ??= new();
         Profile.Prompts = (Profile.Prompts ?? new()).Normalize(); Automatic = (Automatic ?? new()).Normalize();
+        MaxContextTokens = MaxContextTokens <= 0 ? 0 : Math.Clamp(MaxContextTokens, 500, 2000000);
+        foreach (var connection in Connections) { connection.Parameters ??= new(); connection.Parameters.Normalize(); }
         Budget ??= new();
         Budget = Budget with { Calls = Math.Clamp(Budget.Calls, 1, 10000), AutomaticCalls = Math.Clamp(Budget.AutomaticCalls, 1, 10000), Tokens = Math.Clamp(Budget.Tokens, 1000, 10000000) };
         if (!DialogueModes.Rules.ContainsKey(Mode ?? "")) Mode = "잡담";
