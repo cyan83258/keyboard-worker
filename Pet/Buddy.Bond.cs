@@ -110,7 +110,7 @@ public sealed partial class Buddy
         }
         else { pair.Record("화해", spokenName + "의 서운함이 풀렸어요", "먼저 말을 걸어 줘서 금방 풀렸대요."); Adventure.Touch(); }
     }
-    // A pat or a gift. True when it ended a sulk (and the pet said so).
+    // A pat. True when it ended a sulk (and the pet said so).
     public bool Cared(string id)
     {
         var partner = companion; var pair = CurrentPair; if (partner == null || pair == null || !pair.Moods) return false;
@@ -119,14 +119,6 @@ public sealed partial class Buddy
         pair.Record("화해", name + "의 서운함이 풀렸어요", "챙겨 주니 금방 풀렸대요."); Adventure.Touch();
         if (second) partner.Express("happy"); else Express("happy", 6);
         return Auto.Say("makeup", second, "happy", ("partner", second ? Chat.Preferences.Profile.Name : partner.Preset.Profile.Name));
-    }
-    // The pet that got a gift answers in its own voice (by AI when a connection works; otherwise the plain notice).
-    public void GiftReaction(string id, string gift, bool loved, string notice)
-    {
-        bool second = companion?.Preset.Id == id; if (!second && id != CharacterId) return;   // a pet that is not on screen has no bubble to answer in
-        string instruction = "앱이 요청한 한마디입니다. 사용자가 방금 당신에게 '" + gift + "' 선물을 줬습니다. " + (loved ? "당신이 특히 좋아하는 선물입니다." : "특별히 좋아하는 선물은 아닙니다.")
-            + " 이 캐릭터가 선물을 받았을 때 보일 반응을 성격과 말투 그대로 1~2문장으로 말하세요 (기뻐함·쑥스러움·당연하다는 태도·퉁명스러운 감사·떨떠름함 등 성격에 맞는 것). 프로필에 없는 다정함을 덧붙이지 마세요. 직전 자동 대사: {last_line}\n대사만 출력하세요.";
-        _ = Auto.Respond(second, instruction, () => SayTo(id, notice, "happy"));
     }
     public void RecordPair(string kind, string title, string text) { var pair = CurrentPair; if (pair == null) return; pair.Record(kind, title, text); Adventure.Touch(); }
     // The last exchange between the two, kept in their album.

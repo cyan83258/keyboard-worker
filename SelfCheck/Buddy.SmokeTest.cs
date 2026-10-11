@@ -122,6 +122,15 @@ public sealed partial class Buddy
         stageSample.Present("루카", sampleAnswer, false); sampleHost.UpdateLayout(); Pastel.Capture(sampleHost, Path.Combine(shots, "ui-stage-sample.png")); sampleHost.Close();
         var textSample = new MessengerView { Width = 760, Height = 520 }; var textHost = new Window { Content = textSample, Width = 780, Height = 560, ShowActivated = false, ShowInTaskbar = false, WindowStyle = WindowStyle.None }; textHost.Show();
         textSample.Load("루카", new[] { new ChatTurn("뭐 해?", "별일 없다.\n너야말로 이 시간에 무슨 일이냐.", DateTimeOffset.Now, "루카") }); textSample.Asked("루카", "그냥 생각나서"); textSample.Present("루카", "…흥.\n싫지는 않군.", false); textHost.UpdateLayout(); Pastel.Capture(textHost, Path.Combine(shots, "ui-messenger-sample.png")); textHost.Close();
+        var giftView = new GiftWindow(this); giftView.Show();
+        for (int i = 0; i < giftView.Pages; i++) { giftView.ShowPage(i); giftView.UpdateLayout(); Pastel.Capture(giftView, Path.Combine(shots, "ui-gifts-" + i + ".png")); }
+        giftView.Close();
+        // One gift of every rarity, as the cards look after a draw.
+        var cardRow = new WrapPanel { Margin = new Thickness(16), Background = Pastel.Paper }; foreach (var sampleGift in new[] { "꽃다발", "향초", "오르골", "별빛 향수", "달의 반지" }.Select(n => GiftShop.Find(n)!)) { var giftCard = GiftParts.Card(sampleGift, sampleGift.Stars); GiftParts.Pop(giftCard, sampleGift, false); cardRow.Children.Add(giftCard); }
+        cardRow.Children.Add(GiftParts.Card(GiftShop.All[0], -1, true));
+        var cardHost = new Window { Content = cardRow, Width = 920, Height = 240, ShowActivated = false, ShowInTaskbar = false, WindowStyle = WindowStyle.None }; cardHost.Show(); cardHost.UpdateLayout(); Pastel.Capture(cardHost, Path.Combine(shots, "ui-gift-cards.png")); cardHost.Close();
+        var pickView = new GiftPicker(this, StageCharacters()[0]); pickView.Show(); Pastel.Capture(pickView, Path.Combine(shots, "ui-gift-picker.png")); pickView.Close();
+        var pairView = new PairStageWindow(this); pairView.Show(); pairView.UpdateLayout(); Pastel.Capture(pairView, Path.Combine(shots, "ui-pair-stage.png")); pairView.Close();
         var fontView = new FontWindow(this); fontView.Show(); Pastel.Capture(fontView, Path.Combine(shots, "ui-fonts.png")); fontView.Close();
         var goalsView = new ProgressWindow(this); goalsView.Show();
         for (int i = 0; i < goalsView.Pages; i++) { goalsView.ShowPage(i); goalsView.UpdateLayout(); Pastel.Capture(goalsView, Path.Combine(shots, "ui-progress-" + i + ".png")); }

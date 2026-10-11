@@ -21,6 +21,7 @@ public sealed class FriendCard
     public long LastPat { get; set; } = long.MinValue / 2;
     public string Met { get; set; } = "";     // the day this friend first appeared (yyyy-MM-dd)
     public int Stage { get; set; }             // highest closeness stage already celebrated
+    public string BoostDay { get; set; } = ""; // closeness grows twice as fast on this day (a rare gift)
     public FriendCard Snapshot() => (FriendCard)MemberwiseClone();
 }
 public sealed class PairCard
@@ -83,6 +84,10 @@ public sealed class AdventureState
     public DateTimeOffset LastAi { get; set; }
     public List<Anniversary> Anniversaries { get; set; } = new();
     public string AnniversaryDay { get; set; } = "";   // the last day anniversaries were celebrated
+    public Dictionary<string, int> GiftBag { get; set; } = new();   // gifts drawn and not yet given, by name
+    public int GiftDraws { get; set; }                               // draws ever made
+    public int SinceRare { get; set; }                               // draws since the last gift of four stars or more
+    public HashSet<string> GiftsMet { get; set; } = new();          // every gift drawn at least once (the gift collection)
     public AdventureState Snapshot() => new()
     {
         Friends = Friends.ToDictionary(p => p.Key, p => p.Value.Snapshot()),
@@ -93,12 +98,12 @@ public sealed class AdventureState
         Options = Options,
         LastAi = LastAi,
         Anniversaries = Anniversaries.Select(a => a.Snapshot()).ToList(),
-        AnniversaryDay = AnniversaryDay
+        AnniversaryDay = AnniversaryDay,
+        GiftBag = new(GiftBag), GiftDraws = GiftDraws, SinceRare = SinceRare, GiftsMet = new(GiftsMet)
     };
 }
 public sealed class AdventureBook
 {
-    public static readonly string[] Gifts = { "꽃다발", "달콤한 간식", "작은 책", "음악 편지", "별 모양 장식" };
     readonly string path; bool dirty;
     public AdventureState State { get; }
     public event Action? Changed;
@@ -111,6 +116,8 @@ public sealed class AdventureBook
         path = Path.Combine(root ?? Storage.Root, "adventure-book.json");
         State = Storage.ReadJson<AdventureState>(path, 16 * 1024 * 1024) ?? new();
         State.Friends ??= new(); State.Pairs ??= new(); State.Materials ??= new(); State.Stories ??= new(); State.Quests ??= new(); State.Options ??= new(); State.Anniversaries ??= new();
+        State.GiftsMet = (State.GiftsMet ?? new()).Where(n => GiftShop.Find(n) != null).ToHashSet();
+        State.GiftBag = (State.GiftBag ?? new()).Where(p => GiftShop.Find(p.Key) != null && p.Value > 0).ToDictionary(p => p.Key, p => Math.Min(p.Value, 9999));
         State.Options = State.Options with { Prompt = (State.Options.Prompt ?? new AdventureOptions().Prompt).Replace("캐릭터의 성격·말투·세계관에 맞는 따뜻하고 조금 신비로운 작은 모험을 만드세요.", "캐릭터의 성격·말투·세계관에 맞고 그 캐릭터의 분위기가 살아 있는 작은 모험을 만드세요.") };
         foreach (var pair in State.Pairs.Values) { pair.Mood ??= new(); pair.Events ??= new(); pair.Scenes = (pair.Scenes ?? new()).Where(p => !SafeFiles.IsNetworkPath(p.Value)).ToDictionary(p => p.Key, p => p.Value); }
         // Friends that existed before stages were introduced start at the stage they already have, without a celebration.
@@ -119,7 +126,7 @@ public sealed class AdventureBook
     }
     public FriendCard Friend(string id, string name, int initial = 0)
     {
-        if (!State.Friends.TryGetValue(id, out var friend)) { friend = new() { Name = name, Bond = initial, Favorite = Gifts[SHA256.HashData(Encoding.UTF8.GetBytes(id))[0] % Gifts.Length], Met = DateTime.Now.ToString("yyyy-MM-dd"), Stage = Affection.Stage(initial) }; State.Friends[id] = friend; dirty = true; }
+        if (!State.Friends.TryGetValue(id, out var friend)) { friend = new() { Name = name, Bond = initial, Favorite = GiftShop.Favorites[SHA256.HashData(Encoding.UTF8.GetBytes(id))[0] % GiftShop.Favorites.Length], Met = DateTime.Now.ToString("yyyy-MM-dd"), Stage = Affection.Stage(initial) }; State.Friends[id] = friend; dirty = true; }
         name = name[..Math.Min(name.Length, 100)]; if (friend.Name != name) { friend.Name = name; dirty = true; }
         if (friend.Day != DateTime.Now.ToString("yyyy-MM-dd")) { friend.Day = DateTime.Now.ToString("yyyy-MM-dd"); friend.Pats = friend.Gifts = 0; dirty = true; }
         return friend;
@@ -134,6 +141,7 @@ public sealed class AdventureBook
     // Every gain in closeness goes through here so a new stage is noticed exactly once.
     void AddBond(string id, FriendCard friend, int amount)
     {
+        if (friend.BoostDay == DateTime.Now.ToString("yyyy-MM-dd")) amount *= 2;   // a rare gift was given today
         friend.Bond = Math.Min(1000, friend.Bond + amount); int stage = Affection.Stage(friend.Bond);
         if (stage > friend.Stage) { friend.Stage = stage; dirty = true; StageReached?.Invoke(id, friend.Name, stage); }
     }
@@ -142,13 +150,31 @@ public sealed class AdventureBook
         var f = Friend(id, name); if (f.Pats >= 10 || now - f.LastPat < 10000) return false;
         f.LastPat = now; f.Pats++; AddBond(id, f, 1); Update(); return true;
     }
-    public string Gift(string id, string name, string gift, PetGame game)
+    // ---- gifts: drawn with coins into a bag, given from the bag ----
+    public int Owned(string gift) => State.GiftBag.GetValueOrDefault(gift);
+    // Draws one or ten gifts. After many draws without a gift of four stars or more the next one is at least four stars,
+    // and ten at once always hold one of three stars or more.
+    public List<GiftItem> Draw(PetGame game, int count, Func<int, int>? roll = null)
     {
-        if (!Gifts.Contains(gift)) throw new InvalidOperationException("선물을 선택해 주세요."); var f = Friend(id, name); if (f.Gifts >= 3) throw new InvalidOperationException("이 친구에게 오늘 선물은 3개까지 줄 수 있어요.");
-        game.SpendCoins(10); f.Gifts++; bool loved = gift == f.Favorite; f.Discovered |= loved; AddBond(id, f, loved ? 12 : 5); Update();
-        return loved ? $"{name}가 {gift} 선물을 특히 좋아해요 ♡ 친밀도 +12" : $"{name}에게 {gift} 선물을 전했어요 ♡ 친밀도 +5";
+        count = count >= 10 ? 10 : 1; roll ??= Random.Shared.Next; game.SpendCoins(count == 10 ? GiftShop.TenCost : GiftShop.DrawCost); var drawn = new List<GiftItem>();
+        for (int i = 0; i < count; i++)
+        {
+            int atLeast = State.SinceRare >= GiftShop.Pity - 1 ? 4 : count == 10 && i == 9 && drawn.All(g => g.Stars < 3) ? 3 : 1;
+            var gift = GiftShop.Roll(roll, atLeast); drawn.Add(gift); State.GiftBag[gift.Name] = Owned(gift.Name) + 1; State.GiftsMet.Add(gift.Name); State.GiftDraws++; State.SinceRare = gift.Stars >= 4 ? 0 : State.SinceRare + 1;
+        }
+        Update(); return drawn;
     }
-    public void Work(string id, string name, long delta)
+    // Gives one gift from the bag. A favourite counts double; a "boost" gift doubles what the friend gains for the rest of the day.
+    public GiftResult Give(string id, string name, string gift)
+    {
+        var item = GiftShop.Find(gift) ?? throw new InvalidOperationException("선물을 선택해 주세요."); if (Owned(gift) <= 0) throw new InvalidOperationException("가방에 그 선물이 없어요. 먼저 뽑아 주세요.");
+        var f = Friend(id, name); if (f.Gifts >= GiftShop.PerDay) throw new InvalidOperationException($"이 친구에게 오늘 선물은 {GiftShop.PerDay}개까지 줄 수 있어요.");
+        if (Owned(gift) == 1) State.GiftBag.Remove(gift); else State.GiftBag[gift]--;
+        f.Gifts++; bool loved = gift == f.Favorite; f.Discovered |= loved; int before = f.Bond; AddBond(id, f, GiftShop.Gain(item.Stars) * (loved ? 2 : 1));
+        if (item.Effect == "boost") f.BoostDay = DateTime.Now.ToString("yyyy-MM-dd");
+        Update(); int gain = f.Bond - before;
+        return new(item, gain, loved, (loved ? $"{name}가 {gift} 선물을 특히 좋아해요 ♡" : $"{name}에게 {gift} 선물을 전했어요 ♡") + $" 친밀도 +{gain}" + (item.Effect == "boost" ? " · 오늘 하루 친밀도 2배" : ""));
+    }    public void Work(string id, string name, long delta)
     {
         if (delta <= 0) return; var f = Friend(id, name); long before = f.WorkMs / 60000; f.WorkMs += delta;
         foreach (var q in State.Quests.Where(q => q.CharacterId == id && q.StoryId.Length == 0)) { bool reached = q.Ready; q.ProgressMs = Math.Min(q.Minutes * 60000L, q.ProgressMs + delta); if (!reached && q.Ready) QuestReached?.Invoke(q); }

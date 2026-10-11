@@ -180,6 +180,7 @@ public static class SelfTest
         count += StageTests.Run(testDir);
         count += ModTests.Run(testDir);
         count += UpdateTests.Run(testDir);
+        count += GiftTests.Run(testDir);
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test-result.txt"), $"PASS: {count} checks\n");
     }
     sealed class FakeHandler : HttpMessageHandler

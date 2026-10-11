@@ -33,10 +33,9 @@ public sealed class CharacterWindow : Window
         var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(actions, Dock.Right); top.Children.Add(actions);
         Button Tool(string text, Action action) { var button = Pastel.Button(text, action, true); button.Padding = new Thickness(12, 5, 12, 5); button.Margin = new Thickness(6, 0, 0, 0); button.FontSize = 12; actions.Children.Add(button); return button; }
         Tool("페이지 설정", () => { new StageSettingsWindow(buddy, Current) { Owner = this, ShowInTaskbar = false }.ShowDialog(); surface.Forget(); Enter(); });
-        // The gift is handed over here and answered here, not by the pet on the desktop.
-        var gifts = Pastel.Menu(new ContextMenu());
-        foreach (string name in AdventureBook.Gifts) { var item = new MenuItem { Header = name + " · 10코인" }; string chosen = name; item.Click += async (_, _) => await Give(chosen); gifts.Items.Add(item); }
-        gift = Tool("선물하기", () => { gifts.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom; gifts.IsOpen = true; }); gifts.PlacementTarget = gift;
+        Tool("둘만의 페이지", buddy.OpenPairPage).ToolTip = "두 캐릭터가 나 없이 둘이서 이야기하는 페이지";
+        // Gifts are handed over here and answered here; the pets on the desktop take none.
+        gift = Tool("선물하기", async () => { if (busy) return; var picker = new GiftPicker(buddy, Current) { Owner = this, ShowInTaskbar = false }; if (picker.ShowDialog() == true && picker.Chosen != null) await Give(picker.Chosen); });
         who.VerticalAlignment = VerticalAlignment.Center; modes.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(who, Dock.Left); DockPanel.SetDock(modes, Dock.Left); top.Children.Add(who); top.Children.Add(modes); top.Children.Add(closeness);
 
         var bottom = new StackPanel { Margin = new Thickness(0, 10, 0, 0) }; DockPanel.SetDock(bottom, Dock.Bottom); root.Children.Add(bottom);
@@ -114,13 +113,14 @@ public sealed class CharacterWindow : Window
     async Task Say() { string text = input.Text.Trim(); if (text.Length > 0 && await Talk(text, "", "나: " + SafeFiles.OneLine(text, 120))) input.Clear(); }
     async Task Give(string present)
     {
-        if (busy) return; var current = Current; (string Notice, string Note) given;
+        if (busy) return; var current = Current; (GiftResult Result, string Note) given;
         try { given = buddy.GiveOnStage(current, present); } catch (Exception e) { status.Text = e.Message; return; }
-        Closeness();
+        Closeness(); string notice = GiftShop.Stars(given.Result.Gift.Stars) + " " + given.Result.Notice;
         // Without an answer (no AI connection, or it failed) the gift still counts; the notice says so.
-        if (!await Talk("(" + present + "을(를) 선물로 건넨다)", given.Note, given.Notice)) status.Text = given.Notice + " · " + status.Text;
-    }
-    // One exchange: the message goes out, the answer comes in with its standing picture and perhaps a new background. False when no answer came.
+        if (!await Talk("(" + present + "을(를) 선물로 건넨다)", given.Note, notice)) { status.Text = notice + " · " + status.Text; return; }
+        // The rarest gifts keep what was said on receiving them.
+        if (given.Result.Gift.Effect == "keep" && turns.Length > 0 && StageScript.Speech(turns[^1].Assistant) is { Length: > 0 } line && buddy.Collection.Add(current.Id, current.Name, line)) status.Text = notice + "  ·  ✦ 이 한마디를 대사 도감에 담았어요";
+    }    // One exchange: the message goes out, the answer comes in with its standing picture and perhaps a new background. False when no answer came.
     async Task<bool> Talk(string text, string note, string shown)
     {
         if (busy) return false; var current = Current; var sprites = buddy.Stage.Set(current.Id).Sprites;

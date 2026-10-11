@@ -27,6 +27,17 @@ public sealed class StageTalkOptions
     public int MaxTokens { get; set; } = 2048;      // room for the answer (models that think first use part of it)
     public int ContextTurns { get; set; } = 12;     // how many earlier exchanges the character is shown
     public string Prompt { get; set; } = StandardPrompt;
+    // The page for two: the two characters talk to each other and the user is not there.
+    public const string StandardPairPrompt = """
+        지금은 {first_name}와(과) {second_name} 두 사람만 있는 장면입니다. 사용자는 이 자리에 없고, 등장하지도 말을 걸지도 않습니다. 두 사람은 서로에게 말하고 서로에게 반응합니다.
+        - 각자의 프로필에 적힌 성격·말투·가치관을 끝까지 지킵니다. 두 사람의 말투가 서로 닮아 가지 않게 하고, 사이가 원래 다정하지 않다면 억지로 다정하게 만들지 않습니다.
+        - 두 사람의 관계 설정(호칭, 함께 겪은 일, 지킬 것)을 따릅니다. 서로를 대하는 태도에는 그 관계의 역사가 묻어나야 합니다.
+        - 무난한 맞장구를 주고받지 말고, 각자 원하는 것·숨기는 것·신경 쓰이는 것을 가지고 대화를 앞으로 끌고 갑니다. 침묵, 말 돌리기, 장난, 다툼, 화해도 좋습니다.
+        - 표정·몸짓·시선·속마음은 (괄호) 안에 짧게 쓰고, 대사는 괄호 밖에 씁니다.
+        - 지난 장면의 흐름을 이어 가고, 같은 말을 되풀이하지 않습니다.
+        - 이번에는 두 사람이 모두 합쳐 {turns}번 안팎으로 말합니다 (한 사람이 연달아 말해도 됩니다). 한 번의 길이: {length}
+        """;
+    public string PairPrompt { get; set; } = StandardPairPrompt;
     public static string Guide(string length) => Lengths.FirstOrDefault(l => l.Name == length).Guide ?? Lengths[2].Guide;
     public StageTalkOptions Snapshot() => (StageTalkOptions)MemberwiseClone();
     public void Normalize()
@@ -34,6 +45,7 @@ public sealed class StageTalkOptions
         if (Lengths.All(l => l.Name != Length)) Length = "중간";
         MaxTokens = Math.Clamp(MaxTokens, 256, 16000); ContextTurns = Math.Clamp(ContextTurns, 0, 60);
         Prompt = string.IsNullOrWhiteSpace(Prompt) ? StandardPrompt : Prompt[..Math.Min(Prompt.Length, 10000)];
+        PairPrompt = string.IsNullOrWhiteSpace(PairPrompt) ? StandardPairPrompt : PairPrompt[..Math.Min(PairPrompt.Length, 10000)];
     }
 }
 

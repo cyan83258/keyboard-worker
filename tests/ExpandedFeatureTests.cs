@@ -36,13 +36,13 @@ public static class ExpandedFeatureTests
         var game = new PetGame(Path.Combine(folder, "game"));
         game.State.Coins = 100;
         var a = book.Friend("a", "A"); a.Favorite = "작은 책"; var b = book.Friend("b", "B"); b.Favorite = "음악 편지";
-        book.Gift("a", "A", "작은 책", game); book.Gift("b", "B", "꽃다발", game);
-        Check(a.Bond == 12 && b.Bond == 5 && a.Discovered && !b.Discovered && game.State.Coins == 80, "Character-specific gift preferences, independent affection and coin spending");
+        book.State.GiftBag["작은 책"] = 1; book.State.GiftBag["꽃다발"] = 1; book.Give("a", "A", "작은 책"); book.Give("b", "B", "꽃다발");
+        Check(a.Bond == 8 && b.Bond == 4 && a.Discovered && !b.Discovered && game.State.Coins == 100, "Character-specific gift preferences, independent affection and coin spending");
         Check(book.Pat("a", "A", 1000) && book.Pat("b", "B", 1000) && !book.Pat("a", "A", 2000), "Petting cooldown is independent for each character");
         var quest = new StoryQuest { CharacterId = "a", Title = "별빛 다리", Premise = "작은 모험을 시작한다", Minutes = 5 }; book.AddQuest(quest);
         book.Work("b", "B", 10000); Check(quest.ProgressMs == 0, "Only the quest's character receives its work progress");
         for (int i = 0; i < 30; i++) book.Work("a", "A", 10000);
-        Check(quest.Ready && a.Bond == 18 && b.Bond == 6, "Confirmed work minutes progress quest and individual affection");
+        Check(quest.Ready && a.Bond == 14 && b.Bond == 5, "Confirmed work minutes progress quest and individual affection");
         book.AddStory(quest, "별빛을 건너", "친구는 작은 다리를 건너 새로운 이야기를 발견했다.", game, 99); string storyId = quest.StoryId;
         book.AddStory(quest, "중복", "중복 이야기", game, 0);
         Check(book.State.Stories.Count == 1 && book.State.Materials.Count == 0, "Ordinary story is text-first and completing same quest cannot duplicate loot");

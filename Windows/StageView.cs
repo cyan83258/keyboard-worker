@@ -16,6 +16,8 @@ public sealed class StageView : Grid, IStageSurface
 {
     readonly Image backdrop = new() { Stretch = Stretch.UniformToFill, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     readonly Image figure = new() { Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom };
+    // The other character of a scene for two; unused on a page for one.
+    readonly Image partner = new() { Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Visibility = Visibility.Collapsed };
     readonly TextBlock speaker = new() { FontWeight = FontWeights.Bold, FontSize = 14, Foreground = Brushes.White };
     readonly TextBlock line = new() { TextWrapping = TextWrapping.Wrap, FontSize = 16, LineHeight = 25 };
     readonly TextBlock aside = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12.5, FontStyle = FontStyles.Italic, TextAlignment = TextAlignment.Right };
@@ -25,7 +27,11 @@ public sealed class StageView : Grid, IStageSurface
     readonly DispatcherTimer typing = new() { Interval = TimeSpan.FromMilliseconds(28) };
     readonly StagePictures pictures = new();
     List<StageBeat> pages = new(); int page;
-    string full = "", backdropPath = "", figurePath = ""; int shown;
+    string full = "", backdropPath = "", figurePath = "", partnerPath = ""; int shown; bool together, partnerSpeaks;
+    // Raised by a click when the last page of the line is already showing: the page may bring the next line.
+    public event Action? Ended;
+    // More lines follow this one, so the box shows that a click goes on.
+    public bool Continues { get; set; }
     public bool LowPower { get; set; }
     public FrameworkElement Element => this;
     public bool Scrolls => false;
@@ -44,7 +50,7 @@ public sealed class StageView : Grid, IStageSurface
         var inside = new DockPanel(); DockPanel.SetDock(more, Dock.Bottom); inside.Children.Add(more); inside.Children.Add(scroll);
         var box = new Border { Child = inside, Background = glass, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.5, 1.5, 3, 3.5), CornerRadius = new CornerRadius(0, 14, 14, 14), Padding = new Thickness(18, 12, 16, 14), MinHeight = 96, Cursor = System.Windows.Input.Cursors.Hand, ToolTip = "누르면 다음으로 넘어가요" };
         var speech = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(14, 0, 14, 14) }; speech.Children.Add(head); speech.Children.Add(box);
-        Children.Add(backdrop); Children.Add(figure); Children.Add(empty); Children.Add(speech);
+        Children.Add(backdrop); Children.Add(partner); Children.Add(figure); Children.Add(empty); Children.Add(speech);
         box.MouseLeftButtonDown += (_, _) => Advance();
         typing.Tick += (_, _) => { shown = Math.Min(full.Length, shown + 2); line.Text = full[..shown]; scroll.ScrollToEnd(); if (shown >= full.Length) typing.Stop(); };
         SizeChanged += (_, _) => Draw();
@@ -60,17 +66,30 @@ public sealed class StageView : Grid, IStageSurface
     // ---- pictures ----
     public void Show(string background, string standing)
     {
-        bool changed = !string.Equals(figurePath, standing, StringComparison.OrdinalIgnoreCase); backdropPath = background ?? ""; figurePath = standing ?? ""; Draw();
+        bool changed = !string.Equals(figurePath, standing, StringComparison.OrdinalIgnoreCase); backdropPath = background ?? ""; figurePath = standing ?? ""; partnerPath = ""; together = false; Draw();
         if (changed && figure.Source != null && !LowPower) figure.BeginAnimation(OpacityProperty, new DoubleAnimation(.35, 1, TimeSpan.FromMilliseconds(160)));
+    }
+    // A scene for two. both: the two stand side by side (the one who is not speaking a little dimmed); otherwise only the
+    // speaker is shown, in the middle.
+    public void ShowTwo(string background, string first, string second, bool both, bool secondSpeaks)
+    {
+        backdropPath = background ?? ""; figurePath = first ?? ""; partnerPath = second ?? ""; together = both; partnerSpeaks = secondSpeaks; Draw();
     }
     // Pictures are decoded for the size of the stage in screen pixels, so a small window does not hold large bitmaps.
     void Draw()
     {
         if (ActualHeight < 1) return; double scale = VisualTreeHelper.GetDpi(this).DpiScaleY;
-        figure.Height = ActualHeight * .96; figure.MaxWidth = ActualWidth;
-        figure.Source = pictures.Get(figurePath, (int)(ActualHeight * scale)); backdrop.Source = pictures.Get(backdropPath, (int)(Math.Max(ActualWidth, ActualHeight) * scale));
+        figure.Height = partner.Height = ActualHeight * .96;
+        bool pair = partnerPath.Length > 0 || together, soloSecond = pair && !together && partnerSpeaks;
+        // Alone: in the middle. Two: left and right halves. A scene for two that shows one: the speaker in the middle.
+        figure.HorizontalAlignment = pair && together ? HorizontalAlignment.Left : HorizontalAlignment.Center; figure.MaxWidth = partner.MaxWidth = pair && together ? ActualWidth * .56 : ActualWidth;
+        partner.HorizontalAlignment = together ? HorizontalAlignment.Right : HorizontalAlignment.Center;
+        figure.Visibility = soloSecond ? Visibility.Collapsed : Visibility.Visible; partner.Visibility = pair && (together || partnerSpeaks) ? Visibility.Visible : Visibility.Collapsed;
+        figure.Opacity = pair && together && partnerSpeaks ? .62 : 1; partner.Opacity = together && !partnerSpeaks ? .62 : 1;
+        partner.Source = partner.Visibility == Visibility.Visible ? pictures.Get(partnerPath, (int)(ActualHeight * scale)) : null;
+        figure.Source = figure.Visibility == Visibility.Visible ? pictures.Get(figurePath, (int)(ActualHeight * scale)) : null; backdrop.Source = pictures.Get(backdropPath, (int)(Math.Max(ActualWidth, ActualHeight) * scale));
         backdrop.Width = ActualWidth; backdrop.Height = ActualHeight;
-        empty.Visibility = figure.Source == null ? Visibility.Visible : Visibility.Collapsed;
+        empty.Visibility = figure.Source == null && partner.Source == null ? Visibility.Visible : Visibility.Collapsed;
     }
     public void Forget() { pictures.Clear(); Draw(); }
 
@@ -92,7 +111,7 @@ public sealed class StageView : Grid, IStageSurface
         if (pages.Count == 0) pages.Add(new("", "……"));
         Turn(typed);
     }
-    void Turn(bool typed) { var now = pages[page]; Put(speaker.Text, now.Narration, now.Line, typed); more.Text = page < pages.Count - 1 ? $"▼ {page + 1}/{pages.Count}" : pages.Count > 1 ? $"{page + 1}/{pages.Count}" : ""; }
+    void Turn(bool typed) { var now = pages[page]; Put(speaker.Text, now.Narration, now.Line, typed); more.Text = page < pages.Count - 1 ? $"▼ {page + 1}/{pages.Count}" : Continues ? "▼" : pages.Count > 1 ? $"{page + 1}/{pages.Count}" : ""; }
     void Put(string name, string narration, string text, bool typed)
     {
         speaker.Text = name; aside.Text = narration; asideBox.Visibility = narration.Length > 0 ? Visibility.Visible : Visibility.Collapsed; more.Text = "";
@@ -103,6 +122,6 @@ public sealed class StageView : Grid, IStageSurface
     void Advance()
     {
         if (typing.IsEnabled) { typing.Stop(); shown = full.Length; line.Text = full; scroll.ScrollToEnd(); return; }
-        if (page < pages.Count - 1) { page++; Turn(true); }
+        if (page < pages.Count - 1) { page++; Turn(true); } else Ended?.Invoke();
     }
 }

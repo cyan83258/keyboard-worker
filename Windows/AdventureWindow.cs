@@ -30,16 +30,9 @@ public sealed class AdventureWindow : Window
         var choices = buddy.Presets.Items.Select(p => new FriendChoice(p.Id, p.Profile.Name)).ToList();
         if (!choices.Any(c => c.Id == buddy.CharacterId)) choices.Insert(0, new(buddy.CharacterId, buddy.Chat.Preferences.Profile.Name));
         friend.ItemsSource = choices; friend.SelectedItem = choices.FirstOrDefault(c => c.Id == buddy.CharacterId); friends.Children.Add(friend); friends.Children.Add(Pastel.Card(friendInfo, true));
-        var gifts = new ComboBox { ItemsSource = AdventureBook.Gifts, SelectedIndex = 0 }; friends.Children.Add(Pastel.Text("선물 1개 · 10코인 · 캐릭터별 하루 3개")); friends.Children.Add(gifts);
-        friends.Children.Add(Pastel.Button("선물 전하기 ♡", () => Run(() =>
-        {
-            var selected = friend.SelectedItem as FriendChoice ?? throw new InvalidOperationException("친구를 선택해 주세요.");
-            string gift = gifts.SelectedItem.ToString()!; bool loved = gift == book.Friend(selected.Id, selected.Name).Favorite;
-            string result = book.Gift(selected.Id, selected.Name, gift, buddy.Game);
-            buddy.NoteGift(); if (!buddy.Cared(selected.Id)) buddy.GiftReaction(selected.Id, gift, loved, result);
-            status.Text = result;
-        })));
-        var favorite = new ComboBox { ItemsSource = AdventureBook.Gifts }; friends.Children.Add(Pastel.Text("선물 취향 직접 설정 (선택)")); friends.Children.Add(favorite);
+        // Gifts are drawn in the gift window and handed over on the character's own page.
+        var giftRow = new WrapPanel(); giftRow.Children.Add(Pastel.Button("캐릭터 페이지에서 선물하기 ♡", () => { if (friend.SelectedItem is FriendChoice chosen) buddy.OpenCharacter(chosen.Id); })); giftRow.Children.Add(Pastel.Button("선물 뽑기 · 가방", () => buddy.OpenGifts(), true)); friends.Children.Add(giftRow);
+        var favorite = new ComboBox { ItemsSource = GiftShop.All.Select(g => g.Name).ToArray() }; friends.Children.Add(Pastel.Text("선물 취향 직접 설정 (선택)")); friends.Children.Add(favorite);
         friends.Children.Add(Pastel.Button("취향 저장", () => Run(() =>
         {
             if (favorite.SelectedItem == null) return;
@@ -50,7 +43,7 @@ public sealed class AdventureWindow : Window
             book.Save(true);
             Refresh();
         }), true));
-        friends.Children.Add(Pastel.Text("좋아하는 선물은 +12, 다른 선물은 +5 친밀도. 쓰다듬기·확인된 작업 시간으로도 각 친구의 친밀도가 쌓입니다. 쉬거나 접속하지 않아도 감소하지 않습니다.", 12));
+        friends.Children.Add(Pastel.Text("선물은 희귀할수록 친밀도가 많이 오르고(★ +4 ~ ★★★★★ +60), 좋아하는 선물이면 2배예요. 쓰다듬기·확인된 작업 시간으로도 각 친구의 친밀도가 쌓입니다. 쉬거나 접속하지 않아도 감소하지 않습니다.", 12));
         var pair = Tab("두 친구 관계"); pair.Children.Add(Pastel.Text("같이 쌓은 시간은 둘만의 이야기 ♡", 22)); pair.Children.Add(Pastel.Card(pairInfo, true));
         var style = new ComboBox { ItemsSource = new[] { "친근한 친구", "티격태격 라이벌", "다정한 보호자와 장난꾸러기", "조용히 서로를 챙기는 사이" }, SelectedIndex = 0 }; pair.Children.Add(style);
         pair.Children.Add(Pastel.Button("관계 설명 · 호칭 · 둘만의 장면 · 앨범 열기", buddy.OpenPair, true));
@@ -118,7 +111,7 @@ public sealed class AdventureWindow : Window
         if (friend.SelectedItem is FriendChoice selected)
         {
             var f = book.Friend(selected.Id, selected.Name);
-            friendInfo.Text = $"♡ {f.Name} · 친밀도 {f.Bond}/1000\n{Affection.Summary(f.Bond)} · 처음 만난 날 {f.Met}\n함께 작업 {TypingWorkClock.Format(f.WorkMs)}\n좋아하는 선물: {(f.Discovered ? f.Favorite : "아직 발견하지 못했어요")}\n오늘 쓰다듬기 {f.Pats}/10 · 선물 {f.Gifts}/3";
+            friendInfo.Text = $"♡ {f.Name} · 친밀도 {f.Bond}/1000\n{Affection.Summary(f.Bond)} · 처음 만난 날 {f.Met}\n함께 작업 {TypingWorkClock.Format(f.WorkMs)}\n좋아하는 선물: {(f.Discovered ? f.Favorite : "아직 발견하지 못했어요")}\n오늘 쓰다듬기 {f.Pats}/10 · 선물 {f.Gifts}/{GiftShop.PerDay}" + (f.BoostDay == DateTime.Now.ToString("yyyy-MM-dd") ? "\n✧ 오늘 하루 친밀도 2배" : "");
         }
         if (buddy.SecondaryPreset != null)
         {

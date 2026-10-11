@@ -114,11 +114,11 @@ public sealed class HomeWindow : Window
         for (int i = 0; i < people.Count; i++)
         {
             var (id, name, role) = people[i]; var friend = book.Friend(id, name); int stage = Affection.Stage(friend.Bond);
-            var card = Box(Column(grid, i), "♡ " + name, i == 0, ("개인 페이지 · 대화", () => buddy.OpenCharacter(id)), ("선물하기", () => buddy.OpenAdventure(0)));
+            var card = Box(Column(grid, i), "♡ " + name, i == 0, ("개인 페이지 · 대화 · 선물", () => buddy.OpenCharacter(id)));
             card.Children.Add(Line(role + " · " + stage + "단계 " + Affection.Name(stage), 14, true));
             card.Children.Add(ProgressWindow.Bar(friend.Bond / 1000.0, stage == Affection.Stages));
             card.Children.Add(Line($"친밀도 {friend.Bond}/1000" + (Affection.ToNext(friend.Bond) is int left ? $" · 다음 단계까지 {left}" : " · 최고 단계")));
-            card.Children.Add(Line($"함께 작업 {TypingWorkClock.Format(friend.WorkMs)} · 처음 만난 날 {friend.Met}\n오늘 쓰다듬기 {friend.Pats}/10 · 선물 {friend.Gifts}/3 · 좋아하는 선물: {(friend.Discovered ? friend.Favorite : "아직 몰라요")}", 12));
+            card.Children.Add(Line($"함께 작업 {TypingWorkClock.Format(friend.WorkMs)} · 처음 만난 날 {friend.Met}\n오늘 쓰다듬기 {friend.Pats}/10 · 선물 {friend.Gifts}/{GiftShop.PerDay} · 좋아하는 선물: {(friend.Discovered ? friend.Favorite : "아직 몰라요")}", 12));
         }
         if (second == null)
         {
@@ -129,7 +129,7 @@ public sealed class HomeWindow : Window
         {
             var pair = book.Pair(buddy.CharacterId, second.Id); string day = DateTime.Now.ToString("yyyy-MM-dd");
             string sulking = pair.Mood.Sulking.Length > 0 && pair.Mood.SulkingDay == day ? (pair.Mood.Sulking == buddy.CharacterId ? people[0].Name : second.Profile.Name) : "";
-            var card = Box(friends, people[0].Name + " ♡ " + second.Profile.Name, true, ("관계 설정", () => Pair(0)), ("둘만의 장면", () => Pair(1)), ("앨범", () => Pair(2)), (out2 ? "둘째 넣어 두기" : "둘째 불러내기", () => { buddy.SetCompanion(!out2); }));
+            var card = Box(friends, people[0].Name + " ♡ " + second.Profile.Name, true, ("둘만의 페이지", buddy.OpenPairPage), ("관계 설정", () => Pair(0)), ("둘만의 장면", () => Pair(1)), ("앨범", () => Pair(2)), (out2 ? "둘째 넣어 두기" : "둘째 불러내기", () => { buddy.SetCompanion(!out2); }));
             card.Children.Add(Line(pair.Style, 14, true)); card.Children.Add(ProgressWindow.Bar(pair.Bond / 1000.0, pair.Bond >= 1000));
             card.Children.Add(Line($"관계도 {pair.Bond}/1000 · 둘이 나눈 대화 {pair.Conversations}회 · 함께 작업 {TypingWorkClock.Format(pair.WorkMs)}"));
             card.Children.Add(Line(!pair.Moods ? "질투·화해는 꺼져 있어요." : sulking.Length > 0 ? "지금 " + sulking + "이(가) 살짝 토라져 있어요. 말을 걸거나 쓰다듬어 주세요." : "둘 다 기분이 좋아요.", 12));
@@ -182,8 +182,9 @@ public sealed class HomeWindow : Window
         void Try(Action buy, string done) { try { buy(); status.Text = done; } catch (Exception e) { status.Text = e.Message; } }
         var items = Box(shop, "장식 아이템", true, ("장식 상점 · 옷장 열기", buddy.OpenGame));
         items.Children.Add(Line($"리본, 안경, 오라 같은 장식을 사서 입혀요. 가진 것 {buddy.Game.State.Owned.Count}/{buddy.Game.Catalog.Length}개 · 직접 만든 장비는 무료예요."));
-        var gifts = Box(shop, "선물", false, ("선물하러 가기", () => buddy.OpenAdventure(0)));
-        gifts.Children.Add(Line("선물 하나에 10코인, 친구마다 하루 3개까지. 좋아하는 선물이면 친밀도가 더 올라요."));
+        var bagged = buddy.Adventure.State.GiftBag;
+        var gifts = Box(shop, "선물 뽑기", false, ($"뽑으러 가기 · 1번 {GiftShop.DrawCost}코인", () => buddy.OpenGifts(0)), ("내 선물 가방", () => buddy.OpenGifts(1)), ("선물 도감", () => buddy.OpenGifts(2)));
+        gifts.Children.Add(Line($"코인으로 선물을 뽑아 모았다가 캐릭터 페이지에서 건네요. ★부터 ★★★★★까지, 귀할수록 친밀도가 많이 올라요.\n가방에 {bagged.Values.Sum()}개 · 만난 선물 {buddy.Adventure.State.GiftsMet.Count}/{GiftShop.All.Length}종"));
 
         var packs = Box(shop, "대사 팩", false, ("대사집 열기 (산 팩 넣기)", buddy.OpenLineBook));
         packs.Children.Add(Line("한 가지 말투로 묶은 대사 모음이에요. 한 번 사면 어느 캐릭터의 대사집에든 넣고 고칠 수 있어요.", 12));

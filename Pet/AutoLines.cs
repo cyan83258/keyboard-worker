@@ -203,26 +203,6 @@ public sealed class AutoLines
         finally { End(source); }
     }
 
-    // ---- an answer to something the user just did (a gift) ----
-    // One line by AI in the pet's own voice, asked for by the user's action rather than the schedule. When no line can be
-    // made (no connection, a request already running, an error) the fallback is shown instead.
-    public async Task Respond(bool second, string instruction, Action fallback)
-    {
-        var speaker = second ? Partner : null;
-        if (busy || pet.IsChatBusy || !pet.MayShow || (second && speaker == null)) { fallback(); return; }
-        var source = Begin("반응을 만드는 중…"); var preferences = Chat.Preferences; bool shown = false;
-        try
-        {
-            var voice = Voice(preferences, speaker); voice.Profile.Prompts = (voice.Profile.Prompts ?? new()).Normalize() with { Random = instruction };
-            var reply = await AutomaticGenerator.Generate(voice, Chat.Context(), false, 0, lastLine, source.Token, expressions: Pref.AdvancedImages);
-            if (source.IsCancellationRequested || pet.IsClosing || pet.IsHidden || (second && !ReferenceEquals(speaker, Partner))) return;
-            lastLine = reply.Text; Speak(speaker, reply.Text, reply.Mood, false); shown = true; Status = "반응 표시 완료 · " + DateTime.Now.ToString("HH:mm");
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception e) { Status = "반응 생성 실패: " + e.Message; }
-        finally { End(source); if (!shown && !pet.IsClosing) fallback(); }
-    }
-
     // ---- one pet, by AI ----
     async Task SpeakAutomatically(bool nudge, bool test = false)
     {

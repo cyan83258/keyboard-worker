@@ -39,6 +39,13 @@ public sealed class StageTalkPanel : StackPanel
         }));
         buttons.Children.Add(Pastel.Button("기본 프롬프트로", () => { prompt.Text = StageTalkOptions.StandardPrompt; say("'저장'을 눌러야 적용돼요."); }, true)); Children.Add(buttons);
 
+        Children.Add(Pastel.Text("둘만의 페이지 프롬프트", 14));
+        Children.Add(Pastel.Text("두 캐릭터가 나 없이 이야기하는 '둘만의 페이지'에 쓰입니다. 넣을 수 있는 말: {first_name} · {second_name} · {length} · {turns}(주고받는 횟수 — 길이에 따라 2~8). 두 사람의 프로필과 관계 설정은 앞에 항상 붙어요.", 11));
+        var pairPrompt = new TextBox { Text = options.PairPrompt, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 200, MaxLength = 10000, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontSize = 13 }; Children.Add(pairPrompt);
+        var pairButtons = new WrapPanel();
+        pairButtons.Children.Add(Pastel.Button("둘만의 프롬프트 저장", () => { options.PairPrompt = pairPrompt.Text; buddy.Stage.Save(); pairPrompt.Text = options.PairPrompt; say("둘만의 페이지 프롬프트를 저장했어요 ♡"); }));
+        pairButtons.Children.Add(Pastel.Button("기본으로", () => { pairPrompt.Text = StageTalkOptions.StandardPairPrompt; say("'둘만의 프롬프트 저장'을 눌러야 적용돼요."); }, true)); Children.Add(pairButtons);
+
         string thread = mode.Thread(character.Id);
         Children.Add(Pastel.Text(character.Name + "와(과) 나눈 대화 (" + mode.Name + ")", 14)); var count = Pastel.Text("", 12); Children.Add(count);
         void Count() => count.Text = "이 캐릭터 · 이 모드에서 나눈 대화 " + buddy.StageTalks.Turns(thread).Count + "개 (캐릭터와 모드마다 따로, 최근 " + StageLog.Keep + "개까지 보관)"; Count();
