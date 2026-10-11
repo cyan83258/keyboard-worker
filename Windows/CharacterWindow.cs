@@ -33,6 +33,7 @@ public sealed class CharacterWindow : Window
         var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(actions, Dock.Right); top.Children.Add(actions);
         Button Tool(string text, Action action) { var button = Pastel.Button(text, action, true); button.Padding = new Thickness(12, 5, 12, 5); button.Margin = new Thickness(6, 0, 0, 0); button.FontSize = 12; actions.Children.Add(button); return button; }
         Tool("페이지 설정", () => { new StageSettingsWindow(buddy, Current) { Owner = this, ShowInTaskbar = false }.ShowDialog(); surface.Forget(); Enter(); });
+        Tool("대화 기록", () => { if (busy) return; new StageHistoryWindow(buddy, mode.Thread(Current.Id)) { Owner = this, ShowInTaskbar = false }.ShowDialog(); Enter(); }).ToolTip = "여기서 나눈 대화를 다시 보고, 고치고, 모아 두고, 정리해요";
         Tool("둘만의 페이지", buddy.OpenPairPage).ToolTip = "두 캐릭터가 나 없이 둘이서 이야기하는 페이지";
         // Gifts are handed over here and answered here; the pets on the desktop take none.
         gift = Tool("선물하기", async () => { if (busy) return; var picker = new GiftPicker(buddy, Current) { Owner = this, ShowInTaskbar = false }; if (picker.ShowDialog() == true && picker.Chosen != null) await Give(picker.Chosen); });
@@ -70,6 +71,13 @@ public sealed class CharacterWindow : Window
         var next = buddy.PageMode; bool same = surface != null && next.Layout == mode.Layout; mode = next; if (same) return;
         surface = StageSurfaces.For(mode.Layout); surface.LowPower = buddy.Pref.LowPower; holder.Children.Clear(); holder.Children.Add(surface.Element); Fonts();
         older.Visibility = newer.Visibility = surface.Scrolls ? Visibility.Collapsed : Visibility.Visible;
+        // Past the last page of a line a click goes on to the next exchange; before the first page, back to the one before.
+        if (surface is StageView view) { view.Ended += () => { if (!busy && cursor < turns.Length - 1) Turn(1); }; view.Began += () => { if (!busy && cursor > 0 && turns.Length > 0) { Turn(-1); view.ShowLastPage(); } }; }
+    }
+    void Put(string text, bool typed)
+    {
+        if (surface is StageView view) { view.Earlier = cursor > 0 && turns.Length > 0; view.Continues = cursor < turns.Length - 1; }
+        surface.Present(Current.Name, text, typed);
     }
     void Fonts() => surface.SetFont(FontAssets.Get(buddy.Pref.StageFontPath), buddy.Pref.StageFontSize);
 
@@ -96,17 +104,17 @@ public sealed class CharacterWindow : Window
             string avoid = ""; int stage = Affection.Stage(buddy.Adventure.Friend(current.Id, current.Name).Bond);
             var values = new Dictionary<string, string> { ["user"] = current.Persona.UserName ?? "", ["name"] = current.Name, ["partner"] = "" };
             string? greeting = LineBook.Pick(LineBook.Text(current.Book, "", "", LineBook.Greeting(DateTime.Now.Hour)), stage, values, ref avoid);
-            if (greeting != null) { cursor = turns.Length; surface.Present(current.Name, greeting, true); }
-            else surface.Present(current.Name, turns.Length > 0 ? turns[^1].Assistant : "……", false);
+            if (greeting != null) { cursor = turns.Length; Put(greeting, true); }
+            else Put(turns.Length > 0 ? turns[^1].Assistant : "……", false);
         }
-        status.Text = turns.Length > 0 ? $"이 캐릭터와 여기서 나눈 대화 {turns.Length}개가 이어집니다." + (surface.Scrolls ? "" : " ◀ ▶ 로 지난 대화를 볼 수 있어요.") : "아래에 말을 걸어 보세요. AI 연결이 필요해요 (설정 → 말 걸기·AI → AI 연결).";
+        status.Text = turns.Length > 0 ? $"이 캐릭터와 여기서 나눈 대화 {turns.Length}개가 이어집니다." + (surface.Scrolls ? "" : " 화면을 누르면 다음, 오른쪽 클릭이나 '◀ 이전'으로 돌아가요.") : "아래에 말을 걸어 보세요. AI 연결이 필요해요 (설정 → 말 걸기·AI → AI 연결).";
         Pages();
     }
     void Pages() { older.IsEnabled = !busy && cursor > 0; newer.IsEnabled = !busy && cursor < turns.Length - 1; }
     void Turn(int step)
     {
         int next = Math.Clamp(cursor + step, 0, turns.Length - 1); if (turns.Length == 0 || next == cursor) return; cursor = next;
-        surface.Present(Current.Name, turns[cursor].Assistant, false); status.Text = $"{turns[cursor].At.ToLocalTime():yyyy-MM-dd HH:mm} · 나: {SafeFiles.OneLine(turns[cursor].User, 80)}"; Pages();
+        Put(turns[cursor].Assistant, false); status.Text = $"{turns[cursor].At.ToLocalTime():yyyy-MM-dd HH:mm} · 나: {SafeFiles.OneLine(turns[cursor].User, 80)}"; Pages();
     }
 
     // ---- talking ----
@@ -131,7 +139,7 @@ public sealed class CharacterWindow : Window
             var reply = await buddy.SendOnStage(current.Id, text, request.Token, partial => { if (partial.Length > 0) { streamed = true; surface.Streaming(current.Name, partial); } }, note);
             if (buddy.Stage.State.AutoBackdrop && buddy.Stage.Titled(reply.Backdrop) is { } scene && scene.Path != buddy.Stage.State.Backdrop) { buddy.Stage.State.Backdrop = scene.Path; buddy.Stage.Save(); status.Text = shown + "  ·  배경: " + scene.Title; }
             Stand(StageTags.Choose(sprites, reply.Tag, reply.Mood)?.Path ?? "");
-            surface.Present(current.Name, reply.Turn.Assistant, !streamed); History(); answered = true;
+            History(); Put(reply.Turn.Assistant, !streamed); answered = true;
         }
         catch (OperationCanceledException) { status.Text = "답변 만들기를 멈췄어요. 저장하지 않았습니다."; Restore(); }
         catch (Exception e) { status.Text = "답변을 받지 못했어요. " + e.Message; Restore(); }
@@ -142,5 +150,5 @@ public sealed class CharacterWindow : Window
         }
         return answered;
     }
-    void Restore() { surface.Failed(); if (!surface.Scrolls) surface.Present(Current.Name, cursor >= 0 && cursor < turns.Length ? turns[cursor].Assistant : "……", false); }
+    void Restore() { surface.Failed(); if (!surface.Scrolls) Put(cursor >= 0 && cursor < turns.Length ? turns[cursor].Assistant : "……", false); }
 }

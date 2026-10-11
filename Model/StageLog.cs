@@ -26,6 +26,7 @@ public sealed class StageTalkOptions
     public string Length { get; set; } = "중간";
     public int MaxTokens { get; set; } = 2048;      // room for the answer (models that think first use part of it)
     public int ContextTurns { get; set; } = 12;     // how many earlier exchanges the character is shown
+    public int KeepTurns { get; set; } = StageLog.Keep;   // how many exchanges a thread keeps before the oldest are dropped
     public string Prompt { get; set; } = StandardPrompt;
     // The page for two: the two characters talk to each other and the user is not there.
     public const string StandardPairPrompt = """
@@ -43,7 +44,7 @@ public sealed class StageTalkOptions
     public void Normalize()
     {
         if (Lengths.All(l => l.Name != Length)) Length = "중간";
-        MaxTokens = Math.Clamp(MaxTokens, 256, 16000); ContextTurns = Math.Clamp(ContextTurns, 0, 60);
+        MaxTokens = Math.Clamp(MaxTokens, 256, 16000); ContextTurns = Math.Clamp(ContextTurns, 0, 60); KeepTurns = Math.Clamp(KeepTurns, 50, StageLog.MaxKeep);
         Prompt = string.IsNullOrWhiteSpace(Prompt) ? StandardPrompt : Prompt[..Math.Min(Prompt.Length, 10000)];
         PairPrompt = string.IsNullOrWhiteSpace(PairPrompt) ? StandardPairPrompt : PairPrompt[..Math.Min(PairPrompt.Length, 10000)];
     }
@@ -53,22 +54,53 @@ public sealed class StageTalkOptions
 // ordinary chat with the desktop pets: neither is shown to the model in the other.
 public sealed class StageLog
 {
-    public const int Keep = 300, MaxAnswer = 8000;
+    public const int Keep = 300, MaxKeep = 2000, MaxAnswer = 8000;
+    public static readonly int[] Limits = { 100, 200, 300, 500, 1000 };
+    // How many exchanges a thread keeps; the oldest go first when one more is added.
+    public int Limit { get; set; } = Keep;
     readonly string path; readonly Dictionary<string, List<ChatTurn>> threads;
     public event Action? Changed;
     public StageLog(string? root = null)
     {
         path = Path.Combine(root ?? Storage.Root, "stage-chat.json");
         threads = Storage.ReadJson<Dictionary<string, List<ChatTurn>>>(path, 128L * 1024 * 1024) ?? new();
-        foreach (var key in threads.Keys.ToArray()) threads[key] = (threads[key] ?? new()).Where(t => t != null && t.User != null && t.Assistant != null).TakeLast(Keep).ToList();
+        foreach (var key in threads.Keys.ToArray()) threads[key] = (threads[key] ?? new()).Where(t => t != null && t.User != null && t.Assistant != null).TakeLast(MaxKeep).ToList();
     }
     public IReadOnlyList<ChatTurn> Turns(string key) => threads.TryGetValue(key, out var turns) ? turns : Array.Empty<ChatTurn>();
     public void Add(string key, ChatTurn turn)
     {
         if (!threads.TryGetValue(key, out var turns)) threads[key] = turns = new();
-        turns.Add(turn with { User = turn.User[..Math.Min(turn.User.Length, 6000)], Assistant = turn.Assistant[..Math.Min(turn.Assistant.Length, MaxAnswer)] });
-        if (turns.Count > Keep) turns.RemoveRange(0, turns.Count - Keep);
+        turns.Add(Cut(turn));
+        if (turns.Count > Limit) turns.RemoveRange(0, turns.Count - Limit);
         Save();
+    }
+    static ChatTurn Cut(ChatTurn turn) => turn with { User = turn.User[..Math.Min(turn.User.Length, 6000)], Assistant = turn.Assistant[..Math.Min(turn.Assistant.Length, MaxAnswer)] };
+    public IReadOnlyList<string> Threads => threads.Keys.ToArray();
+    // ---- looking after a thread by hand (the history window) ----
+    public bool Replace(string key, ChatTurn old, ChatTurn now)
+    {
+        if (!threads.TryGetValue(key, out var turns)) return false; int at = turns.IndexOf(old); if (at < 0) return false;
+        turns[at] = Cut(now); Save(); return true;
+    }
+    public bool Remove(string key, ChatTurn turn)
+    {
+        if (!threads.TryGetValue(key, out var turns) || !turns.Remove(turn)) return false;
+        if (turns.Count == 0) threads.Remove(key); Save(); return true;
+    }
+    // Keeps only the newest exchanges of a thread. Returns how many were dropped.
+    public int Trim(string key, int keep)
+    {
+        if (!threads.TryGetValue(key, out var turns) || turns.Count <= keep) return 0; int dropped = turns.Count - Math.Max(0, keep);
+        turns.RemoveRange(0, dropped); if (turns.Count == 0) threads.Remove(key); Save(); return dropped;
+    }
+    // Adds exchanges read from a file, in order of time; ones already there are left out. Returns how many came in.
+    public int Import(string key, IEnumerable<ChatTurn> incoming)
+    {
+        if (!threads.TryGetValue(key, out var turns)) turns = new(); var known = turns.Select(t => (t.At, t.User)).ToHashSet(); int added = 0;
+        foreach (var turn in incoming.Where(t => t != null && t.User != null && t.Assistant != null).Select(Cut)) if (known.Add((turn.At, turn.User))) { turns.Add(turn); added++; }
+        if (added == 0) return 0;
+        turns = turns.OrderBy(t => t.At).ToList(); if (turns.Count > MaxKeep) turns.RemoveRange(0, turns.Count - MaxKeep);
+        threads[key] = turns; Save(); return added;
     }
     public void Clear(string key) { if (threads.Remove(key)) Save(); }
     public int Count => threads.Values.Sum(t => t.Count);

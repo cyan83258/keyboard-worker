@@ -48,7 +48,7 @@ public sealed class StageTalkPanel : StackPanel
 
         string thread = mode.Thread(character.Id);
         Children.Add(Pastel.Text(character.Name + "와(과) 나눈 대화 (" + mode.Name + ")", 14)); var count = Pastel.Text("", 12); Children.Add(count);
-        void Count() => count.Text = "이 캐릭터 · 이 모드에서 나눈 대화 " + buddy.StageTalks.Turns(thread).Count + "개 (캐릭터와 모드마다 따로, 최근 " + StageLog.Keep + "개까지 보관)"; Count();
+        void Count() => count.Text = "이 캐릭터 · 이 모드에서 나눈 대화 " + buddy.StageTalks.Turns(thread).Count + "개 (캐릭터와 모드마다 따로, 최근 " + buddy.StageTalks.Limit + "개까지 보관 · 열람과 정리는 페이지의 '대화 기록')"; Count();
         var history = new WrapPanel();
         history.Children.Add(Pastel.Button("텍스트 파일로 내보내기…", () =>
         {

@@ -44,7 +44,7 @@ public static class SettingsBackup
     static bool Skipped(string relative, bool media, bool chat) =>
         relative.StartsWith(SafetyFolder + "/", StringComparison.OrdinalIgnoreCase) || relative.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || relative.Contains(".broken-", StringComparison.OrdinalIgnoreCase)
         || relative.Equals(PendingName, StringComparison.OrdinalIgnoreCase) || relative.Equals("error-log.txt", StringComparison.OrdinalIgnoreCase) || relative.Equals("startup-timing.txt", StringComparison.OrdinalIgnoreCase) || relative.Equals(Manifest, StringComparison.OrdinalIgnoreCase)
-        || (!media && IsMedia(relative)) || (!chat && (relative.Equals("chat-history.json", StringComparison.OrdinalIgnoreCase) || relative.Equals("stage-chat.json", StringComparison.OrdinalIgnoreCase)));
+        || (!media && IsMedia(relative)) || (!chat && (relative.Equals("chat-history.json", StringComparison.OrdinalIgnoreCase) || relative.Equals("stage-chat.json", StringComparison.OrdinalIgnoreCase) || relative.Equals("stage-clips.json", StringComparison.OrdinalIgnoreCase)));
 
     public static void Export(string root, string target, bool media, bool chat, bool keys = true)
     {

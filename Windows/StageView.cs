@@ -11,7 +11,8 @@ namespace KeyboardWorker;
 
 // The stage of a character page, laid out like a visual novel: a background, the character's standing picture in front of it,
 // and the line being said in a box along the bottom. What the character does or thinks (the bracketed parts of an answer)
-// is shown apart from the speech, in a small note above the box. A long answer comes a page at a time; a click turns the page.
+// is shown apart from the speech, in a small note above the box. A long answer comes a page at a time: a click anywhere on
+// the stage (or "다음") turns the page, a right click (or "이전") goes back.
 public sealed class StageView : Grid, IStageSurface
 {
     readonly Image backdrop = new() { Stretch = Stretch.UniformToFill, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
@@ -21,7 +22,9 @@ public sealed class StageView : Grid, IStageSurface
     readonly TextBlock speaker = new() { FontWeight = FontWeights.Bold, FontSize = 14, Foreground = Brushes.White };
     readonly TextBlock line = new() { TextWrapping = TextWrapping.Wrap, FontSize = 16, LineHeight = 25 };
     readonly TextBlock aside = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12.5, FontStyle = FontStyles.Italic, TextAlignment = TextAlignment.Right };
-    readonly TextBlock more = new() { FontSize = 12, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 4, 0, -6) };
+    readonly TextBlock more = new() { FontSize = 12, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+    readonly Border back = Key("◀ 이전", "앞의 대사로 돌아가요 (오른쪽 클릭)"), next = Key("다음 ▶", "다음 대사로 넘어가요 (화면 아무 곳이나 클릭)");
+    static Border Key(string text, string tip) => new() { Child = new TextBlock { Text = text, FontSize = 12.5, FontWeight = FontWeights.Bold, Foreground = Pastel.Hot }, Background = Pastel.Paper, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.2), CornerRadius = new CornerRadius(10), Padding = new Thickness(13, 3, 13, 4), Cursor = System.Windows.Input.Cursors.Hand, ToolTip = tip, Visibility = Visibility.Hidden };
     readonly TextBlock empty = new() { TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(40, 0, 40, 150) };
     readonly ScrollViewer scroll; readonly Border asideBox;
     readonly DispatcherTimer typing = new() { Interval = TimeSpan.FromMilliseconds(28) };
@@ -30,8 +33,11 @@ public sealed class StageView : Grid, IStageSurface
     string full = "", backdropPath = "", figurePath = "", partnerPath = ""; int shown; bool together, partnerSpeaks;
     // Raised by a click when the last page of the line is already showing: the page may bring the next line.
     public event Action? Ended;
-    // More lines follow this one, so the box shows that a click goes on.
+    // Raised by going back when the first page is already showing: the page may bring the line before.
+    public event Action? Began;
+    // More lines follow this one / come before it, so the box offers to go on / back past its own pages.
     public bool Continues { get; set; }
+    public bool Earlier { get; set; }
     public bool LowPower { get; set; }
     public FrameworkElement Element => this;
     public bool Scrolls => false;
@@ -47,11 +53,14 @@ public sealed class StageView : Grid, IStageSurface
         asideBox = new Border { Child = aside, Background = glass, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.2), CornerRadius = new CornerRadius(10), Padding = new Thickness(11, 5, 11, 6), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(150, 0, 6, 6), Visibility = Visibility.Collapsed };
         var head = new Grid(); head.Children.Add(asideBox); head.Children.Add(plate);
         scroll = new ScrollViewer { Content = line, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, MaxHeight = 132 };
-        var inside = new DockPanel(); DockPanel.SetDock(more, Dock.Bottom); inside.Children.Add(more); inside.Children.Add(scroll);
-        var box = new Border { Child = inside, Background = glass, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.5, 1.5, 3, 3.5), CornerRadius = new CornerRadius(0, 14, 14, 14), Padding = new Thickness(18, 12, 16, 14), MinHeight = 96, Cursor = System.Windows.Input.Cursors.Hand, ToolTip = "누르면 다음으로 넘어가요" };
+        var keys = new DockPanel { Margin = new Thickness(0, 8, 0, -6) }; DockPanel.SetDock(back, Dock.Left); DockPanel.SetDock(next, Dock.Right); keys.Children.Add(back); keys.Children.Add(next); keys.Children.Add(more);
+        var inside = new DockPanel(); DockPanel.SetDock(keys, Dock.Bottom); inside.Children.Add(keys); inside.Children.Add(scroll);
+        var box = new Border { Child = inside, Background = glass, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.5, 1.5, 3, 3.5), CornerRadius = new CornerRadius(0, 14, 14, 14), Padding = new Thickness(18, 12, 16, 14), MinHeight = 96, Cursor = System.Windows.Input.Cursors.Hand };
         var speech = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(14, 0, 14, 14) }; speech.Children.Add(head); speech.Children.Add(box);
         Children.Add(backdrop); Children.Add(partner); Children.Add(figure); Children.Add(empty); Children.Add(speech);
-        box.MouseLeftButtonDown += (_, _) => Advance();
+        // The whole stage turns the page, so there is no small target to hit.
+        MouseLeftButtonDown += (_, _) => Advance(); MouseRightButtonDown += (_, e) => { e.Handled = true; Back(); };
+        back.MouseLeftButtonDown += (_, e) => { e.Handled = true; Back(); };
         typing.Tick += (_, _) => { shown = Math.Min(full.Length, shown + 2); line.Text = full[..shown]; scroll.ScrollToEnd(); if (shown >= full.Length) typing.Stop(); };
         SizeChanged += (_, _) => Draw();
         Unloaded += (_, _) => { typing.Stop(); pictures.Clear(); };
@@ -111,10 +120,16 @@ public sealed class StageView : Grid, IStageSurface
         if (pages.Count == 0) pages.Add(new("", "……"));
         Turn(typed);
     }
-    void Turn(bool typed) { var now = pages[page]; Put(speaker.Text, now.Narration, now.Line, typed); more.Text = page < pages.Count - 1 ? $"▼ {page + 1}/{pages.Count}" : Continues ? "▼" : pages.Count > 1 ? $"{page + 1}/{pages.Count}" : ""; }
+    void Turn(bool typed)
+    {
+        var now = pages[page]; Put(speaker.Text, now.Narration, now.Line, typed); more.Text = pages.Count > 1 ? $"{page + 1} / {pages.Count}" : "";
+        back.Visibility = page > 0 || Earlier ? Visibility.Visible : Visibility.Hidden; next.Visibility = page < pages.Count - 1 || Continues ? Visibility.Visible : Visibility.Hidden;
+    }
+    // The last page of the line just presented: where going back from the next line lands.
+    public void ShowLastPage() { if (pages.Count > 1) { page = pages.Count - 1; Turn(false); } }
     void Put(string name, string narration, string text, bool typed)
     {
-        speaker.Text = name; aside.Text = narration; asideBox.Visibility = narration.Length > 0 ? Visibility.Visible : Visibility.Collapsed; more.Text = "";
+        speaker.Text = name; aside.Text = narration; asideBox.Visibility = narration.Length > 0 ? Visibility.Visible : Visibility.Collapsed; more.Text = ""; back.Visibility = next.Visibility = Visibility.Hidden;
         full = text; typing.Stop();
         if (typed && !LowPower && text.Length > 0) { shown = 0; line.Text = ""; typing.Start(); } else { shown = text.Length; line.Text = text; scroll.ScrollToEnd(); }
     }
@@ -123,5 +138,10 @@ public sealed class StageView : Grid, IStageSurface
     {
         if (typing.IsEnabled) { typing.Stop(); shown = full.Length; line.Text = full; scroll.ScrollToEnd(); return; }
         if (page < pages.Count - 1) { page++; Turn(true); } else Ended?.Invoke();
+    }
+    void Back()
+    {
+        typing.Stop();
+        if (page > 0 && page < pages.Count) { page--; Turn(false); } else Began?.Invoke();
     }
 }

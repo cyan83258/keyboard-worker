@@ -116,6 +116,7 @@ public sealed partial class Buddy
         var artView = new StageSettingsWindow(this, StageCharacters()[0]); artView.Show();
         for (int i = 0; i < artView.Pages; i++) { artView.ShowPage(i); artView.UpdateLayout(); Pastel.Capture(artView, Path.Combine(shots, "ui-stage-settings-" + i + ".png")); }
         artView.Close(); pageView.Close();
+        foreach (bool keptView in new[] { false, true }) { var historyView = new StageHistoryWindow(this, StageCharacters()[0].Id, keptView); historyView.Show(); historyView.UpdateLayout(); Pastel.Capture(historyView, Path.Combine(shots, keptView ? "ui-stage-clips.png" : "ui-stage-history.png")); historyView.Close(); }
         // The two surfaces with a made-up answer: stage directions apart from the speech, a long answer in pages, and text messages.
         string sampleAnswer = "(팔짱을 낀 채 창밖을 본다) 흥, 이제야 왔군. 기다리게 한 값은 치러야지. 오늘 있었던 일을 하나도 빠짐없이 말해 보아라. (작게 웃으며) 지루한 이야기라도 들어는 주마. 다만 변명은 듣지 않겠다.";
         var stageSample = new StageView { Width = 760, Height = 520 }; var sampleHost = new Window { Content = stageSample, Width = 780, Height = 560, ShowActivated = false, ShowInTaskbar = false, WindowStyle = WindowStyle.None }; sampleHost.Show(); sampleHost.UpdateLayout();

@@ -55,6 +55,37 @@ public static class StageTests
         OrderedStore.FlushAsync().GetAwaiter().GetResult(); var reopenedLog = new StageLog(chatHome);
         Check(reopenedLog.Turns("long").Count == StageLog.Keep && reopenedLog.Turns("long")[0].User == "m20" && reopenedLog.Turns("long")[0].Assistant.Length == StageLog.MaxAnswer && reopenedLog.Turns("g").Count == 2, "A thread keeps its newest exchanges, cut to size, and is saved");
         reopenedLog.Clear("g"); reopenedLog.Clear("nobody"); OrderedStore.FlushAsync().GetAwaiter().GetResult(); Check(new StageLog(chatHome).Turns("g").Count == 0 && new StageLog(chatHome).Turns("g|sms").Count == 1, "Clearing one thread leaves the others");
+        // Looking after a thread by hand: edit, delete, tidy, a limit of its own, and a file that can be read restored
+        string careHome = Path.Combine(home, "care"); Directory.CreateDirectory(careHome); var care = new StageLog(careHome) { Limit = 100 }; var careDay = new DateTimeOffset(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
+        for (int i = 0; i < 120; i++) care.Add("g", new ChatTurn("말 " + i, "답 " + i, careDay.AddMinutes(i), "루카", "g"));
+        Check(care.Turns("g").Count == 100 && care.Turns("g")[0].User == "말 20" && care.Threads.Single() == "g", "The limit the user chose drops the oldest exchanges");
+        var thirdTurn = care.Turns("g")[2];
+        Check(care.Replace("g", thirdTurn, thirdTurn with { Assistant = "고친 답" }) && care.Turns("g")[2].Assistant == "고친 답" && care.Turns("g")[2].User == "말 22" && !care.Replace("g", thirdTurn, thirdTurn) && !care.Replace("nobody", thirdTurn, thirdTurn), "An exchange can be edited in place");
+        Check(care.Remove("g", care.Turns("g")[0]) && care.Turns("g").Count == 99 && care.Turns("g")[0].User == "말 21" && !care.Remove("g", thirdTurn), "One exchange can be deleted");
+        Check(care.Trim("g", 200) == 0 && care.Trim("g", 50) == 49 && care.Turns("g").Count == 50 && care.Turns("g")[^1].User == "말 119" && care.Trim("nobody", 0) == 0, "Tidying keeps the newest exchanges");
+        string archiveText = StageArchive.Write("루카 · 마주 보기", care.Turns("g")); var restored = StageArchive.Read(archiveText);
+        Check(archiveText.Contains("답 119") && restored.Length == 50 && restored[0] == care.Turns("g")[0] && restored[^1].Assistant == "답 119", "A thread is written to a file and read restored the same");
+        var elsewhere = new StageLog(Path.Combine(careHome, "other")); elsewhere.Add("e", new ChatTurn("나중 말", "나중 답", careDay.AddDays(1), "미오", "e"));
+        Check(elsewhere.Import("e", restored) == 50 && elsewhere.Turns("e").Count == 51 && elsewhere.Turns("e")[^1].User == "나중 말" && elsewhere.Turns("e")[0].User == "말 70" && elsewhere.Import("e", restored) == 0, "Imported exchanges are put in order of time, once");
+        int refusalCount = 0; foreach (string bad in new[] { "not json", "{}", "{\"format\":\"something-else\",\"turns\":[]}", "{\"format\":\"keyboard-worker-fewKept\",\"turns\":[]}" }) try { StageArchive.Read(bad); } catch (InvalidOperationException) { refusalCount++; }
+        Check(refusalCount == 4, "A file that is not a fewKept is refused with a message");
+        Check(care.Trim("g", 0) == 50 && care.Threads.Count == 0, "A thread tidied to nothing is gone");
+        var fewKept = new StageTalkOptions { KeepTurns = 5 }; fewKept.Normalize(); var manyKept = new StageTalkOptions { KeepTurns = 99999 }; manyKept.Normalize();
+        Check(fewKept.KeepTurns == 50 && manyKept.KeepTurns == StageLog.MaxKeep && new StageTalkOptions().KeepTurns == StageLog.Keep, "The limit stays within bounds");
+
+        // What the user sets aside is a copy that outlives the fewKept
+        var setAside = new StageClips(careHome); var likedTurn = new ChatTurn("좋아하는 말", "(웃으며) 잊지 마라. 이건 약속이다.", careDay, "루카", "g"); int clipCount = 0; setAside.Changed += () => clipCount++;
+        Check(!setAside.Has("g", likedTurn) && setAside.Toggle("g", likedTurn) && setAside.Has("g", likedTurn) && !setAside.Has("e", likedTurn) && setAside.Items.Single().Whole && setAside.Items[0].Text == likedTurn.Assistant, "A whole exchange is set aside");
+        Check(setAside.Excerpt("g", likedTurn, "  이건 약속이다. ") && !setAside.Excerpt("g", likedTurn, "이건 약속이다.") && !setAside.Excerpt("g", likedTurn, "   ") && setAside.Items.Count == 2 && !setAside.Items[1].Whole && setAside.Items[1].Text == "이건 약속이다." && setAside.Items[1].User == "", "A passage is set aside once, trimmed");
+        OrderedStore.FlushAsync().GetAwaiter().GetResult(); var setAsideAgain = new StageClips(careHome);
+        Check(setAsideAgain.Items.Count == 2 && setAsideAgain.Has("g", likedTurn) && clipCount == 2, "Clips are saved");
+        string clipWritten = StageClips.Text(setAsideAgain.Items, true, key => key == "g" ? "루카 · 마주 보기" : key);
+        Check(clipWritten.Contains("루카 · 마주 보기 · 발췌") && clipWritten.Contains("**나**: 좋아하는 말") && clipWritten.Contains("이건 약속이다."), "Clips are written out with where they came from");
+        Check(!setAsideAgain.Toggle("g", likedTurn) && !setAsideAgain.Has("g", likedTurn) && setAsideAgain.Items.Single().Text == "이건 약속이다.", "Setting aside again lets go of the exchange and keeps the passage");
+        setAsideAgain.Remove(setAsideAgain.Items[0]); Check(setAsideAgain.Items.Count == 0, "A clip can be removed");
+        var pageCast = new[] { new Buddy.StageCharacter("g", "루카", new Persona(), null, "대표", "루카"), new Buddy.StageCharacter("e", "미오", new Persona(), null, "둘째", "미오") };
+        Check(StageHistoryWindow.Title("g", pageCast, StageMode.BuiltIn) == "루카 · 마주 보기" && StageHistoryWindow.Title("e|sms", pageCast, StageMode.BuiltIn) == "미오 · 문자 메시지" && StageHistoryWindow.Title("pair:g+e", pageCast, StageMode.BuiltIn) == "루카 ♡ 미오 · 둘만의 페이지" && StageHistoryWindow.Title("gone", pageCast, StageMode.BuiltIn).StartsWith("(지워진 캐릭터)"), "A thread is named by whose page it is");
+
         var ordinary = new ChatRepository(Path.Combine(chatHome, "ordinary")); Check(ordinary.Turns.Count == 0 && !File.Exists(Path.Combine(chatHome, "chat-history.json")), "Nothing of a page's talk is written to the ordinary chat history");
 
         // Length, room and the page's own prompt

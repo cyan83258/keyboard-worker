@@ -11,9 +11,11 @@ namespace KeyboardWorker;
 public sealed partial class Buddy
 {
     // Loaded the first time a page is opened, not at start-up.
-    StageBook? stage; StageLog? stageLog;
+    StageBook? stage; StageLog? stageLog; StageClips? stageClips;
     public StageBook Stage => stage ??= new StageBook();
-    public StageLog StageTalks => stageLog ??= new StageLog();
+    public StageLog StageTalks => stageLog ??= new StageLog { Limit = Stage.State.Talk.KeepTurns };
+    // Exchanges and passages the user set aside from the pages.
+    public StageClips StageClips => stageClips ??= new StageClips();
     public StageMode PageMode => StageMode.Find(Stage.State.Mode);
     // A character that has a page: the main pet, the second pet and every other saved preset.
     // Title tells two presets of the same character apart ("별명 (루카)").

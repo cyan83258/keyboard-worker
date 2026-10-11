@@ -27,7 +27,9 @@ public sealed class PairStageWindow : Window
         this.buddy = buddy; view.LowPower = buddy.Pref.LowPower; bond.Foreground = Pastel.Hot; var root = new DockPanel { Margin = new Thickness(16) };
         var top = new DockPanel { Margin = new Thickness(0, 0, 0, 10) }; DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(actions, Dock.Right); top.Children.Add(actions);
-        var settings = Pastel.Button("페이지 설정", () => { new StageSettingsWindow(buddy, A) { Owner = this, ShowInTaskbar = false }.ShowDialog(); view.Forget(); Enter(); }, true); settings.Padding = new Thickness(12, 5, 12, 5); settings.FontSize = 12; actions.Children.Add(settings);
+        var settings = Pastel.Button("페이지 설정", () => { new StageSettingsWindow(buddy, A) { Owner = this, ShowInTaskbar = false }.ShowDialog(); view.Forget(); Enter(); }, true); settings.Padding = new Thickness(12, 5, 12, 5); settings.FontSize = 12;
+        var history = Pastel.Button("대화 기록", () => { if (busy || !Ready) return; new StageHistoryWindow(buddy, Thread) { Owner = this, ShowInTaskbar = false }.ShowDialog(); Enter(); }, true); history.Padding = new Thickness(12, 5, 12, 5); history.FontSize = 12; history.Margin = new Thickness(0, 0, 6, 0); history.ToolTip = "둘이 나눈 장면을 다시 보고, 고치고, 모아 두고, 정리해요";
+        actions.Children.Add(history); actions.Children.Add(settings);
         var heart = new TextBlock { Text = "♡", Foreground = Pastel.Hot, FontSize = 18, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) };
         foreach (var part in new UIElement[] { first, heart, second }) { if (part is ComboBox box) box.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(part, Dock.Left); top.Children.Add(part); }
         top.Children.Add(bond);
@@ -44,7 +46,7 @@ public sealed class PairStageWindow : Window
         var corner = new Border { Child = hearts, Background = glass, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.2), CornerRadius = new CornerRadius(13), Padding = new Thickness(7, 3, 5, 2), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 10, 10, 0) };
         var frame = new Grid(); frame.Children.Add(view); frame.Children.Add(corner);
         root.Children.Add(new Border { Child = frame, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.5, 1.5, 3, 3.5), CornerRadius = new CornerRadius(12), ClipToBounds = true });
-        view.Ended += Next;
+        view.Ended += Next; view.Began += Previous;
 
         var people = buddy.StageCharacters().Select(c => new Choice(c, c.Role + " · " + c.Title)).ToArray();
         filling = true; first.ItemsSource = people; second.ItemsSource = people; first.SelectedIndex = 0; second.SelectedIndex = people.Length > 1 ? 1 : 0; filling = false;
@@ -94,10 +96,12 @@ public sealed class PairStageWindow : Window
     }
     void Show(bool typed)
     {
-        var line = lines[at]; Stand(line); view.Continues = at < lines.Count - 1; view.Present(line.Second ? B.Name : A.Name, line.Text, typed);
+        var line = lines[at]; Stand(line); view.Continues = at < lines.Count - 1; view.Earlier = at > 0; view.Present(line.Second ? B.Name : A.Name, line.Text, typed);
     }
     // A click past the end of a line: the next line of the scene, if there is one.
     void Next() { if (busy || at >= lines.Count - 1) return; at++; Show(true); if (at == lines.Count - 1) status.Text = "장면이 끝났어요. '진행'을 누르면 이어집니다."; }
+
+    void Previous() { if (busy || at <= 0 || lines.Count == 0) return; at--; Show(false); view.ShowLastPage(); }
 
     async Task Play()
     {
@@ -105,12 +109,12 @@ public sealed class PairStageWindow : Window
         if (choice != PairStageTalk.Continue && text.Length == 0) choice = PairStageTalk.Continue;
         busy = true; go.IsEnabled = false; stop.IsEnabled = true; first.IsEnabled = second.IsEnabled = kind.IsEnabled = input.IsEnabled = false; request = new CancellationTokenSource();
         status.Text = choice == PairStageTalk.Situation ? "상황: " + SafeFiles.OneLine(text, 100) : choice == PairStageTalk.Continue ? "두 사람이 이야기하는 중…" : (choice == PairStageTalk.AsFirst ? a.Name : b.Name) + ": " + SafeFiles.OneLine(text, 100);
-        view.Continues = false; view.Present(lines.Count > 0 ? (lines[^1].Second ? b.Name : a.Name) : a.Name, "…", false);
+        view.Continues = view.Earlier = false; view.Present(lines.Count > 0 ? (lines[^1].Second ? b.Name : a.Name) : a.Name, "…", false);
         try
         {
             var scene = await buddy.SendPairOnStage(a, b, choice, text, request.Token); input.Clear();
             if (buddy.Stage.State.AutoBackdrop && buddy.Stage.Titled(scene.Backdrop) is { } place && place.Path != buddy.Stage.State.Backdrop) { buddy.Stage.State.Backdrop = place.Path; buddy.Stage.Save(); }
-            lines = scene.Lines.ToList(); at = 0; Stand(lines[0], true); Show(true); status.Text = lines.Count > 1 ? "대사창을 누르면 다음 대사로 넘어가요. (" + lines.Count + "마디)" : "장면이 끝났어요. '진행'을 누르면 이어집니다.";
+            lines = scene.Lines.ToList(); at = 0; Stand(lines[0], true); Show(true); status.Text = lines.Count > 1 ? "화면을 누르면 다음 대사, 오른쪽 클릭이나 '◀ 이전'으로 앞 대사를 볼 수 있어요. (" + lines.Count + "마디)" : "장면이 끝났어요. '진행'을 누르면 이어집니다.";
         }
         catch (OperationCanceledException) { status.Text = "장면 만들기를 멈췄어요. 저장하지 않았습니다."; Restore(); }
         catch (Exception e) { status.Text = "장면을 받지 못했어요. " + e.Message; Restore(); }
