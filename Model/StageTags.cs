@@ -51,10 +51,11 @@ public static class StageTags
     public static string Instruction(IReadOnlyList<string> names) => names.Count < 2 ? "" :
         "\n[스탠딩 그림 고르기]\n화면에는 당신의 스탠딩 그림이 함께 보입니다. 이번 대사의 감정이나 상황에 가장 어울리는 그림 이름 하나를 다음에서 고르세요: " + string.Join(", ", names)
         + "\n대사를 다 쓴 뒤 맨 마지막 줄에 [sprite:이름] 형식으로 붙이세요. 목록에 있는 이름만 쓰고, 캐릭터의 평소 성격이 아니라 이 대사의 감정으로 고르며, 같은 그림만 반복하지 마세요. 이 표식은 앱이 지우니 대사에서 설명하지 마세요.";
-    // The background is only changed when the scene really moves somewhere else, so most answers carry no mark for it.
+    // Every answer names the background of its scene: a mark that is always asked for is given far more reliably than one
+    // that is only wanted now and then. Naming the one already on show changes nothing.
     public static string BackdropInstruction(IReadOnlyList<string> titles, string current) => titles.Count < 2 ? "" :
-        "\n[배경 바꾸기]\n화면 뒤에는 배경 그림이 있습니다. 지금 배경: " + (current.Length == 0 ? "없음" : current) + ". 고를 수 있는 배경: " + string.Join(", ", titles)
-        + "\n대화 속 장소·시간·분위기가 지금 배경과 달라졌을 때만 [bg:이름]을 맨 마지막 줄에 붙여 바꾸세요. 그대로 두는 것이 보통이며 그럴 때는 이 표식을 쓰지 않습니다. 목록에 있는 이름만 쓰세요.";
+        "\n[배경]\n화면 뒤에는 장면의 배경 그림이 있습니다. 지금 배경: " + (current.Length == 0 ? "없음" : current) + "\n고를 수 있는 배경: " + BackdropWords.Listed(titles)
+        + "\n매 답변의 맨 마지막 줄에 [bg:이름] 형식으로, 이 답변이 끝난 시점의 장소와 시간대에 가장 가까운 배경을 적으세요. 대화 속에서 다른 곳으로 가거나(예: 바닷가에 도착) 시간대가 바뀌면 그 장소의 배경으로 바꾸고, 그대로라면 지금 배경 이름을 그대로 적습니다. 이름은 목록에 있는 것을 괄호 앞부분 그대로 씁니다. 이 표식은 앱이 지우니 대사에서 언급하지 마세요.";
 
     static readonly Regex marks = new(@"\s*\[(sprite|bg)\s*:\s*([^\]\r\n]{1,40})\]", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
     // The line without its marks, and the names in them ("" when there is none).

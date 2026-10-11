@@ -41,7 +41,7 @@ public static class PairStageTalk
             + $"\n- who: first = {first}, second = {second}. 대사 안에 이름이나 '이름:'을 붙이지 않습니다."
             + (pictures.Length > 0 ? "\n- sprite: 그 대사의 감정·상황에 어울리는 그 인물의 그림 이름 (아래 목록에서만, 없으면 빈 문자열)." + pictures : "\n- sprite: 빈 문자열.")
             + "\n- view: 두 사람이 함께 화면에 보이면 \"both\", 한 사람만 비추는 것이 어울리면(독백, 클로즈업, 상대가 자리에 없을 때) \"solo\"."
-            + (cast.Backdrops.Count > 1 ? "\n- bg: 장소·시간·분위기가 지금 배경(" + (cast.Backdrop.Length == 0 ? "없음" : cast.Backdrop) + ")과 달라졌을 때만 다음 중 하나, 그대로면 빈 문자열: " + string.Join(", ", cast.Backdrops) : "\n- bg: 빈 문자열.");
+            + (cast.Backdrops.Count > 1 ? "\n- bg: 장면이 끝난 시점의 장소와 시간대에 가장 가까운 배경 이름(괄호 앞부분 그대로). 두 사람이 다른 곳으로 가거나 시간대가 바뀌면 그 장소의 배경을, 그대로면 지금 배경(" + (cast.Backdrop.Length == 0 ? "없음" : cast.Backdrop) + ")을 적습니다. 고를 수 있는 배경: " + BackdropWords.Listed(cast.Backdrops) : "\n- bg: 빈 문자열.");
     }
     // Reads the model's answer. If it did not keep to JSON, lines written as "이름: 대사" are still understood.
     public static PairScene Parse(string reply, string firstName, string secondName)

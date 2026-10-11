@@ -100,7 +100,9 @@ public sealed class StageBook
         }
         state.Backdrops = state.Backdrops.Where(b => b != null && !string.IsNullOrWhiteSpace(b.Path) && !SafeFiles.IsNetworkPath(b.Path)).DistinctBy(b => b.Path, StringComparer.OrdinalIgnoreCase).Take(MaxBackdrops).ToList();
         foreach (var backdrop in state.Backdrops) { backdrop.Title = StageTags.Clean(backdrop.Title, "배경"); backdrop.Group = SafeFiles.OneLine(backdrop.Group, 20); }
-        if (state.Backdrops.Concat(BuiltIn).All(b => !string.Equals(b.Path, state.Backdrop ?? "", StringComparison.OrdinalIgnoreCase))) state.Backdrop = "";
+        // A built-in background is still the same picture after the program folder moved (another install, an update elsewhere).
+        if (state.Backdrops.Concat(BuiltIn).All(b => !string.Equals(b.Path, state.Backdrop ?? "", StringComparison.OrdinalIgnoreCase)))
+            state.Backdrop = string.IsNullOrEmpty(state.Backdrop) ? "" : BuiltIn.FirstOrDefault(b => string.Equals(Path.GetFileName(b.Path), Path.GetFileName(state.Backdrop), StringComparison.OrdinalIgnoreCase))?.Path ?? "";
         state.Talk.Normalize();
     }
     public StageSet Set(string id) { if (!Sets.TryGetValue(id, out var set)) Sets[id] = set = new(); return set; }
@@ -114,8 +116,19 @@ public sealed class StageBook
         if (State.Backdrops.Count >= MaxBackdrops) throw new InvalidOperationException("배경은 " + MaxBackdrops + "장까지 등록할 수 있어요.");
         var backdrop = new StageBackdrop { Title = title, Group = group == BuiltInGroup ? "" : group, Path = file }; State.Backdrops.Add(backdrop); if (State.Backdrop.Length == 0) State.Backdrop = file; Save(); return backdrop;
     }
-    // The background with this title, for when the AI names one.
-    public StageBackdrop? Titled(string title) => title.Trim().Length == 0 ? null : Backdrops.FirstOrDefault(b => string.Equals(b.Title, title.Trim(), StringComparison.OrdinalIgnoreCase));
+    // The background meant by a name, however the AI wrote it (see BackdropWords).
+    public StageBackdrop? Titled(string title) { var all = Backdrops; return BackdropWords.Find(all.Select(b => b.Title).ToArray(), title) is { } found ? all.First(b => b.Title == found) : null; }
+    // The background the scene moved to, put on show: the one the AI named or, when it named none, the place the narration
+    // (the bracketed parts of what was just said) tells of. Null when the scene stays where it is or the user chose to change it by hand.
+    public StageBackdrop? Move(string named, string said)
+    {
+        if (!State.AutoBackdrop) return null; var all = Backdrops; var titles = all.Select(b => b.Title).ToArray();
+        string? title = BackdropWords.Find(titles, named);
+        if (title == null && named.Trim().Length == 0) title = BackdropWords.Guess(titles, string.Join(" ", StageScript.Parse(said).Select(b => b.Narration)), CurrentTitle);
+        var scene = title == null ? null : all.First(b => b.Title == title);
+        if (scene == null || string.Equals(scene.Path, State.Backdrop, StringComparison.OrdinalIgnoreCase)) return null;
+        State.Backdrop = scene.Path; Save(); return scene;
+    }
     public string CurrentTitle => Backdrops.FirstOrDefault(b => string.Equals(b.Path, State.Backdrop, StringComparison.OrdinalIgnoreCase))?.Title ?? "";
     public string[] Groups => Backdrops.Select(b => b.Group).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Length == 0).ThenBy(g => g, StringComparer.CurrentCulture).ToArray();
     public void Save() { Fit(State); OrderedStore.SaveJson(path, State.Snapshot()); Changed?.Invoke(); }

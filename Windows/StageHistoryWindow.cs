@@ -51,13 +51,13 @@ public sealed class StageHistoryWindow : Window
         Pastel.Window(this, "대화 기록", root, 720, 820); MinWidth = 560; MinHeight = 480; Refresh();
     }
     // A thread's key in words: whose page, and which mode ("pair:" is the page for two).
-    public static string Title(string key, IReadOnlyList<Buddy.StageCharacter> people, IReadOnlyList<StageMode> modes)
+    public static new string Title(string key, IReadOnlyList<Buddy.StageCharacter> people, IReadOnlyList<StageMode> modes)
     {
         string Name(string id) => people.FirstOrDefault(c => c.Id == id)?.Title ?? "(지워진 캐릭터)";
         if (key.StartsWith("pair:", StringComparison.Ordinal)) { var ids = key[5..].Split('+'); return ids.Length == 2 ? Name(ids[0]) + " ♡ " + Name(ids[1]) + " · 둘만의 페이지" : key; }
         int bar = key.IndexOf('|'); return bar < 0 ? Name(key) + " · " + StageMode.BuiltIn[0].Name : Name(key[..bar]) + " · " + (modes.FirstOrDefault(m => m.Id == key[(bar + 1)..])?.Name ?? key[(bar + 1)..]);
     }
-    string Title(string key) => Title(key, buddy.StageCharacters(), StageMode.All);
+    new string Title(string thread) { string page = Title(StageRooms.Split(thread).Key, buddy.StageCharacters(), StageMode.All), room = buddy.Rooms.RoomName(thread); return room.Length > 0 ? page + " · " + room : page; }
     void View(bool keptView) { kept = keptView; status.Text = ""; Refresh(); }
     bool Busy() { if (!buddy.IsChatBusy) return false; status.Text = "답변을 만드는 중이에요. 끝난 뒤에 다시 해 주세요."; return true; }
 

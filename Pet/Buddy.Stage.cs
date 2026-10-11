@@ -16,6 +16,26 @@ public sealed partial class Buddy
     public StageLog StageTalks => stageLog ??= new StageLog { Limit = Stage.State.Talk.KeepTurns };
     // Exchanges and passages the user set aside from the pages.
     public StageClips StageClips => stageClips ??= new StageClips();
+    // The chat rooms of the pages; each has a thread of talk, an author's note and a memory of its own.
+    StageRooms? stageRooms; readonly HashSet<StageRoom> remembering = new();
+    public StageRooms Rooms => stageRooms ??= new StageRooms();
+    // Brings a room's memory up to date and says what happened. asked: the user pressed the button; otherwise it is only
+    // done when the room wants it and enough new talk has gathered ("" = nothing to do).
+    public async Task<string> Remember(string thread, StageRoom room, bool asked, CancellationToken cancellation = default)
+    {
+        var pending = StageMemory.Pending(StageTalks.Turns(thread), room);
+        if (!asked && (!room.AutoSummary || pending.Length < Rooms.State.SummaryEvery)) return "";
+        if (pending.Length == 0) return "새로 요약할 대화가 없어요.";
+        if (!remembering.Add(room)) return "이미 요약하는 중이에요.";
+        try
+        {
+            room.Summary = await StageMemory.Summarize(Chat.Preferences, Rooms.State.SummaryConnection, room.Summary, pending, cancellation);
+            room.SummarizedAt = pending[^1].At; Rooms.Save(); return "대화 " + pending.Length + "개를 기억에 담았어요.";
+        }
+        finally { remembering.Remove(room); }
+    }
+    // After an exchange, in the background. A failure is not shown: the memory is simply brought up to date next time.
+    async void RememberQuietly(string thread, StageRoom room) { try { await Remember(thread, room, false); } catch (Exception) { } }
     public StageMode PageMode => StageMode.Find(Stage.State.Mode);
     // A character that has a page: the main pet, the second pet and every other saved preset.
     // Title tells two presets of the same character apart ("별명 (루카)").
@@ -41,8 +61,9 @@ public sealed partial class Buddy
             // The backgrounds are only offered when the user lets the character change them.
             var backdrops = Stage.State.AutoBackdrop ? Stage.Backdrops.Select(b => b.Title).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() : Array.Empty<string>();
             var scene = new StageScene(StageTags.Names(Stage.Set(id).Sprites), backdrops, Stage.CurrentTitle, all.Select(c => c.Name).Where(n => n != who.Name).Distinct().ToArray(), note);
-            var reply = await StageTalk.Send(StageTalks, Chat.Preferences, who.Persona, mode.Thread(id), text, state, scene, Stage.State.Talk, mode, request.Token, streaming ? pump.Report : null);
-            if (!closing) ProgressCount("chats");
+            string key = mode.Thread(id); var room = Rooms.Current(key); string thread = StageRooms.Thread(key, room);
+            var reply = await StageTalk.Send(StageTalks, Chat.Preferences, who.Persona, thread, text, state + room.Context(), scene, Stage.State.Talk, mode, request.Token, streaming ? pump.Report : null);
+            if (!closing) { ProgressCount("chats"); RememberQuietly(thread, room); }
             return reply;
         }
         finally { activeChatCancellation = null; sending = false; }
@@ -71,8 +92,9 @@ public sealed partial class Buddy
             var cast = new PairCast(first.Persona, second.Persona, StageTags.Names(Stage.Set(first.Id).Sprites), StageTags.Names(Stage.Set(second.Id).Sprites), relation, backdrops, Stage.CurrentTitle);
             PairLine? authored = kind is PairStageTalk.AsFirst or PairStageTalk.AsSecond && text.Trim().Length > 0 ? new PairLine(kind == PairStageTalk.AsSecond, text.Trim()) : null;
             string state = Pref.Awareness.Clock ? DayClock.Rough(DateTime.Now) : "";
-            var (_, scene) = await PairStageTalk.Send(StageTalks, Chat.Preferences, cast, PairThread(first.Id, second.Id), PairStageTalk.Direction(kind, text, first.Name, second.Name), authored, state, Stage.State.Talk, request.Token);
-            if (!closing) Adventure.TalkPair(first.Id, second.Id);
+            string key = PairThread(first.Id, second.Id); var room = Rooms.Current(key); string thread = StageRooms.Thread(key, room);
+            var (_, scene) = await PairStageTalk.Send(StageTalks, Chat.Preferences, cast, thread, PairStageTalk.Direction(kind, text, first.Name, second.Name), authored, state + room.Context(), Stage.State.Talk, request.Token);
+            if (!closing) { Adventure.TalkPair(first.Id, second.Id); RememberQuietly(thread, room); }
             return scene;
         }
         finally { activeChatCancellation = null; sending = false; }

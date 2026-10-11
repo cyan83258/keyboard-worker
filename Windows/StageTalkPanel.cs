@@ -8,7 +8,7 @@ using Microsoft.Win32;
 namespace KeyboardWorker;
 
 // How the characters talk on their pages: the wanted length, the room for an answer, the prompt written for these talks,
-// and this character's own thread (export, clear). The ordinary chat with the desktop pets is set elsewhere and is not touched here.
+// for the page for one and the page for two. The ordinary chat with the desktop pets is set elsewhere and is not touched here.
 public sealed class StageTalkPanel : StackPanel
 {
     public StageTalkPanel(Buddy buddy, Buddy.StageCharacter character, Window owner, Action<string> say)
@@ -46,24 +46,6 @@ public sealed class StageTalkPanel : StackPanel
         pairButtons.Children.Add(Pastel.Button("둘만의 프롬프트 저장", () => { options.PairPrompt = pairPrompt.Text; buddy.Stage.Save(); pairPrompt.Text = options.PairPrompt; say("둘만의 페이지 프롬프트를 저장했어요 ♡"); }));
         pairButtons.Children.Add(Pastel.Button("기본으로", () => { pairPrompt.Text = StageTalkOptions.StandardPairPrompt; say("'둘만의 프롬프트 저장'을 눌러야 적용돼요."); }, true)); Children.Add(pairButtons);
 
-        string thread = mode.Thread(character.Id);
-        Children.Add(Pastel.Text(character.Name + "와(과) 나눈 대화 (" + mode.Name + ")", 14)); var count = Pastel.Text("", 12); Children.Add(count);
-        void Count() => count.Text = "이 캐릭터 · 이 모드에서 나눈 대화 " + buddy.StageTalks.Turns(thread).Count + "개 (캐릭터와 모드마다 따로, 최근 " + buddy.StageTalks.Limit + "개까지 보관 · 열람과 정리는 페이지의 '대화 기록')"; Count();
-        var history = new WrapPanel();
-        history.Children.Add(Pastel.Button("텍스트 파일로 내보내기…", () =>
-        {
-            var turns = buddy.StageTalks.Turns(thread); if (turns.Count == 0) { say("내보낼 대화가 없어요."); return; }
-            var dialog = new SaveFileDialog { Filter = "텍스트 (*.txt)|*.txt|Markdown (*.md)|*.md", FileName = character.Name + "-" + mode.Name + "-" + DateTime.Now.ToString("yyyyMMdd") }; if (dialog.ShowDialog(owner) != true) return;
-            string user = string.IsNullOrWhiteSpace(character.Persona.UserName) ? "나" : character.Persona.UserName;
-            try { File.WriteAllText(dialog.FileName, ChatSearchWindow.Text(turns, dialog.FileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase), user), new System.Text.UTF8Encoding(true)); say(turns.Count + "개 대화를 내보냈어요."); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { say("저장하지 못했습니다. " + e.Message); }
-        }, true));
-        history.Children.Add(Pastel.Button("이 대화 지우기", () =>
-        {
-            if (buddy.StageTalks.Turns(thread).Count == 0) { say("지울 대화가 없어요."); return; }
-            if (MessageBox.Show(owner, character.Name + "와(과) '" + mode.Name + "' 모드에서 나눈 대화를 모두 지울까요?\n되돌릴 수 없어요.", "대화 지우기", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
-            buddy.StageTalks.Clear(thread); Count(); say("대화를 지웠어요. 페이지를 닫았다 열면 처음부터 시작합니다.");
-        }, true));
-        Children.Add(history);
+        Children.Add(Pastel.Text("나눈 대화를 다시 보거나 내보내고 정리하는 것은 페이지 위쪽의 '대화 기록'에서, 방마다 다른 지시와 기억은 '채팅방'에서 합니다.", 12));
     }
 }

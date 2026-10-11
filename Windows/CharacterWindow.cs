@@ -15,8 +15,8 @@ namespace KeyboardWorker;
 // Pictures, the prompt and the length are set in StageSettingsWindow.
 public sealed class CharacterWindow : Window
 {
-    readonly Buddy buddy; readonly ComboBox who = new() { DisplayMemberPath = "Label", MinWidth = 200 }, modes = new() { DisplayMemberPath = "Name", MinWidth = 120, Margin = new Thickness(8, 0, 0, 0), ToolTip = "페이지 모드" };
-    readonly TextBlock closeness = new() { FontWeight = FontWeights.Bold, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 8, 0), TextTrimming = TextTrimming.CharacterEllipsis }, status = Pastel.Text("", 12);
+    readonly Buddy buddy; readonly ComboBox who = new() { DisplayMemberPath = "Label", MinWidth = 160 }, modes = new() { DisplayMemberPath = "Name", MinWidth = 110, Margin = new Thickness(8, 0, 0, 0), ToolTip = "페이지 모드" }, rooms = new() { DisplayMemberPath = "Name", MinWidth = 110, Margin = new Thickness(8, 0, 0, 0), ToolTip = "채팅방 (방마다 대화가 따로 이어져요)" };
+    readonly TextBlock closeness = new() { FontWeight = FontWeights.Bold, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(3, 0, 7, 1) }, status = Pastel.Text("", 12);
     readonly TextBox input = new() { MaxLength = 6000, Padding = new Thickness(10, 7, 10, 7), FontSize = 15 };
     readonly HeartMeter hearts = new(18); readonly Grid holder = new();
     readonly Button send, stop, older, newer, gift;
@@ -24,6 +24,9 @@ public sealed class CharacterWindow : Window
     IStageSurface surface = null!; StageMode mode = StageMode.BuiltIn[0];
     CancellationTokenSource? request; ChatTurn[] turns = Array.Empty<ChatTurn>(); int cursor = -1; string picture = ""; bool busy, filling;
     Buddy.StageCharacter Current => ((Choice)who.SelectedItem).Character;
+    // The page (this character in this mode) and the thread of the chat room open on it.
+    string Page => mode.Thread(Current.Id);
+    string Thread => buddy.Rooms.Thread(Page);
     public CharacterWindow(Buddy buddy)
     {
         this.buddy = buddy; closeness.Foreground = Pastel.Hot;
@@ -31,13 +34,16 @@ public sealed class CharacterWindow : Window
 
         var top = new DockPanel { Margin = new Thickness(0, 0, 0, 10) }; DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(actions, Dock.Right); top.Children.Add(actions);
-        Button Tool(string text, Action action) { var button = Pastel.Button(text, action, true); button.Padding = new Thickness(12, 5, 12, 5); button.Margin = new Thickness(6, 0, 0, 0); button.FontSize = 12; actions.Children.Add(button); return button; }
-        Tool("페이지 설정", () => { new StageSettingsWindow(buddy, Current) { Owner = this, ShowInTaskbar = false }.ShowDialog(); surface.Forget(); Enter(); });
-        Tool("대화 기록", () => { if (busy) return; new StageHistoryWindow(buddy, mode.Thread(Current.Id)) { Owner = this, ShowInTaskbar = false }.ShowDialog(); Enter(); }).ToolTip = "여기서 나눈 대화를 다시 보고, 고치고, 모아 두고, 정리해요";
-        Tool("둘만의 페이지", buddy.OpenPairPage).ToolTip = "두 캐릭터가 나 없이 둘이서 이야기하는 페이지";
+        // Left: whose page, how, and which room. Right: what belongs to the room (its settings, its record), then the rest.
+        void Tool(string text, string tip, Action action) => actions.Children.Add(StageParts.Tool(text, tip, action));
+        Tool("채팅방", "방 만들기 · 작가 노트 · 기억 요약", () => { if (busy) return; new StageRoomWindow(buddy, Page, Current.Name + " · " + mode.Name) { Owner = this, ShowInTaskbar = false }.ShowDialog(); Enter(); });
+        Tool("대화 기록", "여기서 나눈 대화를 다시 보고, 고치고, 모아 두고, 정리해요", () => { if (busy) return; new StageHistoryWindow(buddy, Thread) { Owner = this, ShowInTaskbar = false }.ShowDialog(); Enter(); });
         // Gifts are handed over here and answered here; the pets on the desktop take none.
-        gift = Tool("선물하기", async () => { if (busy) return; var picker = new GiftPicker(buddy, Current) { Owner = this, ShowInTaskbar = false }; if (picker.ShowDialog() == true && picker.Chosen != null) await Give(picker.Chosen); });
-        who.VerticalAlignment = VerticalAlignment.Center; modes.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(who, Dock.Left); DockPanel.SetDock(modes, Dock.Left); top.Children.Add(who); top.Children.Add(modes); top.Children.Add(closeness);
+        gift = StageParts.Tool("선물하기", "가방에 있는 선물을 건네요", async () => { if (busy) return; var picker = new GiftPicker(buddy, Current) { Owner = this, ShowInTaskbar = false }; if (picker.ShowDialog() == true && picker.Chosen != null) await Give(picker.Chosen); }); actions.Children.Add(gift);
+        Tool("둘만의 페이지", "두 캐릭터가 나 없이 둘이서 이야기하는 페이지", buddy.OpenPairPage);
+        Tool("페이지 설정", "스탠딩 그림 · 배경 · 프롬프트와 길이", () => { new StageSettingsWindow(buddy, Current) { Owner = this, ShowInTaskbar = false }.ShowDialog(); surface.Forget(); Enter(); });
+        foreach (var box in new[] { who, modes, rooms }) { box.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(box, Dock.Left); top.Children.Add(box); }
+        top.Children.Add(new Border());   // the space between the two sides
 
         var bottom = new StackPanel { Margin = new Thickness(0, 10, 0, 0) }; DockPanel.SetDock(bottom, Dock.Bottom); root.Children.Add(bottom);
         var row = new DockPanel(); var buttons = new StackPanel { Orientation = Orientation.Horizontal }; DockPanel.SetDock(buttons, Dock.Right); row.Children.Add(buttons);
@@ -50,7 +56,8 @@ public sealed class CharacterWindow : Window
 
         // Closeness as hearts, small, in the upper right corner of the page whatever the surface.
         var paper = ((SolidColorBrush)Pastel.Paper).Color; var glass = new SolidColorBrush(Color.FromArgb(215, paper.R, paper.G, paper.B)); glass.Freeze();
-        var corner = new Border { Child = hearts, Background = glass, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.2), CornerRadius = new CornerRadius(13), Padding = new Thickness(7, 3, 5, 2), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 10, 10, 0) };
+        var badge = new StackPanel { Orientation = Orientation.Horizontal }; badge.Children.Add(closeness); badge.Children.Add(hearts);
+        var corner = new Border { Child = badge, Background = glass, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.2), CornerRadius = new CornerRadius(13), Padding = new Thickness(7, 3, 5, 2), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 10, 10, 0) };
         var frame = new Grid(); frame.Children.Add(holder); frame.Children.Add(corner);
         root.Children.Add(new Border { Child = frame, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.5, 1.5, 3, 3.5), CornerRadius = new CornerRadius(12), ClipToBounds = true });
 
@@ -59,9 +66,10 @@ public sealed class CharacterWindow : Window
         modes.ItemsSource = StageMode.All; modes.SelectedItem = StageMode.All.FirstOrDefault(m => m.Id == buddy.PageMode.Id) ?? StageMode.All[0];
         filling = false;
         who.SelectionChanged += (_, _) => { if (!filling && who.SelectedItem != null) Enter(); };
+        rooms.SelectionChanged += (_, _) => { if (!filling && rooms.SelectedItem is StageRoom room) { buddy.Rooms.Select(Page, room); Enter(); } };
         modes.SelectionChanged += (_, _) => { if (filling || modes.SelectedItem is not StageMode chosen) return; buddy.Stage.State.Mode = chosen.Id; buddy.Stage.Save(); Surface(); Enter(); };
         buddy.Adventure.Changed += Closeness; Closed += (_, _) => { buddy.Adventure.Changed -= Closeness; request?.Cancel(); };
-        Pastel.Window(this, "캐릭터 페이지", root, 900, 820); MinWidth = 640; MinHeight = 560; Surface(); Enter();
+        Pastel.Window(this, "캐릭터 페이지", root, 920, 820); MinWidth = 880; MinHeight = 560; Surface(); Enter();
         Loaded += (_, _) => input.Focus(); Activated += (_, _) => Fonts();
     }
     public void Select(string id) { foreach (Choice choice in who.Items) if (choice.Character.Id == id) { who.SelectedItem = choice; return; } }
@@ -85,7 +93,7 @@ public sealed class CharacterWindow : Window
     void Closeness()
     {
         if (who.SelectedItem == null) return; var friend = buddy.Adventure.Friend(Current.Id, Current.Name); int stage = Affection.Stage(friend.Bond);
-        closeness.Text = $"{stage}단계 · {Affection.Name(stage)}"; hearts.Bond = friend.Bond;
+        closeness.Text = Affection.Name(stage); closeness.ToolTip = stage + "단계"; hearts.Bond = friend.Bond;
         hearts.ToolTip = $"친밀도 {friend.Bond}/1000 · 하트 {HeartMeter.Filled(friend.Bond):0.0}/5" + (Affection.ToNext(friend.Bond) is int left ? $"\n다음 단계까지 {left}" : "\n최고 단계") + $"\n처음 만난 날 {friend.Met}";
     }
     void Stand(string wanted)
@@ -94,11 +102,13 @@ public sealed class CharacterWindow : Window
         picture = sprite?.Path ?? ""; surface.Show(buddy.Stage.State.Backdrop, picture);
         surface.EmptyNote = sprites.Count == 0 ? "아직 스탠딩 그림이 없어요.\n오른쪽 위 '페이지 설정'에서 " + Current.Name + "의 그림을 넣어 보세요.\n파일 이름을 smile, sad, angry처럼 지으면 감정이 자동으로 인식돼요." : "";
     }
-    void History() { turns = buddy.StageTalks.Turns(mode.Thread(Current.Id)).ToArray(); cursor = turns.Length - 1; }
+    void History() { turns = buddy.StageTalks.Turns(Thread).ToArray(); cursor = turns.Length - 1; }
     // Switching to a character (or a mode): its pictures, its own thread of talk, and a greeting it wrote (or its last line).
     void Enter()
     {
-        var current = Current; Title = current.Name + " · " + mode.Name; Closeness(); Stand(""); History(); surface.Load(current.Name, turns);
+        var current = Current; Closeness(); Stand("");
+        filling = true; var all = buddy.Rooms.Rooms(Page).ToArray(); var open = buddy.Rooms.Current(Page); rooms.ItemsSource = all; rooms.SelectedItem = open; filling = false;
+        Title = current.Name + " · " + mode.Name + (all.Length > 1 ? " · " + open.Name : ""); History(); surface.Load(current.Name, turns);
         if (!surface.Scrolls)
         {
             string avoid = ""; int stage = Affection.Stage(buddy.Adventure.Friend(current.Id, current.Name).Bond);
@@ -132,12 +142,12 @@ public sealed class CharacterWindow : Window
     async Task<bool> Talk(string text, string note, string shown)
     {
         if (busy) return false; var current = Current; var sprites = buddy.Stage.Set(current.Id).Sprites;
-        busy = true; send.IsEnabled = false; stop.IsEnabled = true; who.IsEnabled = false; modes.IsEnabled = false; input.IsEnabled = false; gift.IsEnabled = false; Pages(); status.Text = shown;
+        busy = true; send.IsEnabled = false; stop.IsEnabled = true; who.IsEnabled = false; modes.IsEnabled = false; rooms.IsEnabled = false; input.IsEnabled = false; gift.IsEnabled = false; Pages(); status.Text = shown;
         surface.Asked(current.Name, text); bool streamed = false, answered = false; request = new CancellationTokenSource();
         try
         {
             var reply = await buddy.SendOnStage(current.Id, text, request.Token, partial => { if (partial.Length > 0) { streamed = true; surface.Streaming(current.Name, partial); } }, note);
-            if (buddy.Stage.State.AutoBackdrop && buddy.Stage.Titled(reply.Backdrop) is { } scene && scene.Path != buddy.Stage.State.Backdrop) { buddy.Stage.State.Backdrop = scene.Path; buddy.Stage.Save(); status.Text = shown + "  ·  배경: " + scene.Title; }
+            if (buddy.Stage.Move(reply.Backdrop, text + "\n" + reply.Turn.Assistant) is { } scene) status.Text = shown + "  ·  배경: " + scene.Title;
             Stand(StageTags.Choose(sprites, reply.Tag, reply.Mood)?.Path ?? "");
             History(); Put(reply.Turn.Assistant, !streamed); answered = true;
         }
@@ -145,7 +155,7 @@ public sealed class CharacterWindow : Window
         catch (Exception e) { status.Text = "답변을 받지 못했어요. " + e.Message; Restore(); }
         finally
         {
-            request?.Dispose(); request = null; busy = false; send.IsEnabled = true; stop.IsEnabled = false; who.IsEnabled = true; modes.IsEnabled = true; input.IsEnabled = true; gift.IsEnabled = true; Pages();
+            request?.Dispose(); request = null; busy = false; send.IsEnabled = true; stop.IsEnabled = false; who.IsEnabled = true; modes.IsEnabled = true; rooms.IsEnabled = true; input.IsEnabled = true; gift.IsEnabled = true; Pages();
             if (IsVisible) input.Focus();
         }
         return answered;

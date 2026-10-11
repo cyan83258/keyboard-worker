@@ -181,6 +181,7 @@ public static class SelfTest
         count += ModTests.Run(testDir);
         count += UpdateTests.Run(testDir);
         count += GiftTests.Run(testDir);
+        count += RoomTests.Run(testDir);
         count += AiParameterTests.Run();
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test-result.txt"), $"PASS: {count} checks\n");
     }

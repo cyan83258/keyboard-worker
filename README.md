@@ -71,6 +71,7 @@
 | `pet-game.json`, `adventure-book.json` | 성장·상점·옷장, 친구 카드·이야기책·기념일·두 친구의 관계와 앨범 |
 | `line-collection.json` | 대사 도감 |
 | `stage.json`, `stage-chat.json` | 캐릭터 페이지의 그림·배경·대화 설정, 캐릭터 페이지에서 나눈 대화 (일반 채팅과 따로) |
+| `stage-rooms.json`, `stage-clips.json` | 페이지의 채팅방(방마다 작가 노트·기억 요약), 대화 기록에서 모아 둔 대화와 발췌 |
 | `mods\` | 추가한 모드 파일 |
 | `progress.json` | 출석, 주간 목표, 미니 이벤트, 업적, 코인으로 연 것 |
 | `usage-log.json`, `work-time.json`, `ai-usage.json` | 작업 통계와 AI 사용량 |
