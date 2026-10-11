@@ -19,8 +19,8 @@
     <ApplicationIcon Condition="Exists('Assets\pet.ico')">Assets\pet.ico</ApplicationIcon>
     <!-- Sources live in Core, Pet, Ai, Model, Windows and SelfCheck. These folders are not part of the program:
          app = the copy that is actually run, dist = the package for other people, tests = the test project,
-         tools = build scripts. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);app\**;dist\**;tests\**;tools\**</DefaultItemExcludes>
+         tools = build scripts, installer = the small setup program (its own project). -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);app\**;dist\**;tests\**;tools\**;installer\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup><InternalsVisibleTo Include="KeyboardWorker.Tests" /></ItemGroup>
   <ItemGroup><AssemblyMetadata Include="UpdateRepository" Value="$(UpdateRepository)" /></ItemGroup>

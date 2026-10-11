@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The small setup program: one exe that fetches the newest release from GitHub and installs it.
+       It targets .NET Framework 4.8, which every Windows 10 / 11 already has, so the exe needs nothing else. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>KeyboardWorker-Setup</AssemblyName>
+    <RootNamespace>KeyboardWorkerSetup</RootNamespace>
+    <Product>Keyboard Worker Setup</Product>
+    <Version>1.0.0</Version>
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
+    <DebugType>none</DebugType>
+    <ApplicationIcon Condition="Exists('..\Assets\pet.ico')">..\Assets\pet.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+</Project>
