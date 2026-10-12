@@ -41,7 +41,8 @@ public sealed class GameWindow : Window
         growth.Children.Add(Pastel.Text("목표는 날짜가 바뀌면 새로 시작하지만 레벨·코인·아이템·친밀도는 유지됩니다. 쉬어도 벌점이나 감소는 없어요. 성장 기록은 캐릭터 프리셋을 바꿔도 이어집니다.", 12));
         var store = Tab("상점"); store.Children.Add(shop);
         var closet = Tab("옷장"); closet.Children.Add(Pastel.Text("머리·얼굴·목·몸·오라를 한 개씩 장착할 수 있어요. PNG/JPG 캐릭터에도 장식이 겹쳐 표시됩니다."));
-        closet.Children.Add(Pastel.Button("+ 내 장비 등록 (PNG / JPG)", () => new CustomGearWindow(game) { Owner = this, ShowInTaskbar = false }.ShowDialog(), true)); closet.Children.Add(inventory);
+        closet.Children.Add(Pastel.Button("+ 내 장비 등록 (PNG / JPG)", () => new CustomGearWindow(game) { Owner = this, ShowInTaskbar = false }.ShowDialog(), true));
+        var place = Pastel.Button("악세서리 위치 편집", () => new GearPlaceWindow(buddy) { Owner = this, ShowInTaskbar = false }.ShowDialog(), true); place.ToolTip = "입고 있는 악세서리를 끌어서 옮기고, 휠로 크기를 바꿔요"; closet.Children.Add(place); closet.Children.Add(inventory);
         inventory.IsVisibleChanged += (_, _) => UpdatePreviews();
         var options = Tab("꾸미기·설정");
         Toggle(options, "Enabled", "게임 성장·보상 기능 사용", game.State.Enabled); Toggle(options, "ShowBadge", "캐릭터 아래 레벨·코인 버튼 표시", game.State.ShowBadge);
@@ -95,11 +96,12 @@ public sealed class GameWindow : Window
     {
         Refresh(); shop.Children.Clear(); inventory.Children.Clear(); previews.Clear();
         previewCache.Configure(new Preferences { ImagePaths = game.State.CustomItems.ToDictionary(c => c.Id, c => c.ImagePath) }, 120);
-        // What the program draws itself, then the accessories that came with it as pictures.
-        foreach (var item in PetGame.Items.Concat(ShopGear.Catalog))
+        // The accessories that came with the program as pictures (Assets\Accessories).
+        if (ShopGear.Catalog.Count == 0) shop.Children.Add(Pastel.Text("아직 파는 악세서리가 없어요. 내 그림은 옷장의 '+ 내 장비 등록'으로 바로 입힐 수 있어요.", 13));
+        foreach (var item in ShopGear.Catalog)
         {
             var content = new DockPanel();
-            var shipped = ShopGear.Items.FirstOrDefault(g => g.Id == item.Id); FrameworkElement icon = shipped != null ? StageParts.Picture(shipped.ImagePath, 70) : new ItemPreview { ItemId = item.Id, Width = 80, Height = 70 }; icon.Margin = new Thickness(shipped == null ? 0 : 5, 0, shipped == null ? 12 : 17, 0);
+            var icon = StageParts.Picture(ShopGear.Items.First(g => g.Id == item.Id).ImagePath, 70); icon.Margin = new Thickness(5, 0, 17, 0);
             DockPanel.SetDock(icon, Dock.Left);
             content.Children.Add(icon);
             var p = new StackPanel(); p.Children.Add(Pastel.Text($"{item.Name} · {item.Price}코인 · Lv.{item.Level}", 17)); p.Children.Add(Pastel.Text(item.Description, 12));

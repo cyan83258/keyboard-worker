@@ -48,19 +48,7 @@ public sealed partial class Buddy
         OpenPresets(); Pastel.Capture(presetsWindow!, Path.Combine(AppContext.BaseDirectory, "ui-presets.png"));
         OpenGame(); Pastel.Capture(gameWindow!, Path.Combine(AppContext.BaseDirectory, "ui-game.png")); gameWindow!.CaptureTabs(AppContext.BaseDirectory);
         var gearEditor = new CustomGearWindow(Game); gearEditor.Show(); Pastel.Capture(gearEditor, Path.Combine(AppContext.BaseDirectory, "ui-custom-gear.png")); gearEditor.Close();
-        var originalOutfit = accessories.Outfit;
-        var demo = new GameState();
-        demo.Equipped["head"] = "pink-bow";
-        demo.Equipped["effect"] = "sparkles";
-        accessories.Outfit = demo;
-        accessories.InvalidateVisual();
-        UpdateLayout();
-        var dressed = new RenderTargetBitmap((int)Width, (int)Height, 96, 96, PixelFormats.Pbgra32);
-        dressed.Render((Visual)Content);
-        var dressEncoder = new PngBitmapEncoder();
-        dressEncoder.Frames.Add(BitmapFrame.Create(dressed));
-        using (var stream = File.Create(Path.Combine(AppContext.BaseDirectory, "ui-accessory-preview.png"))) dressEncoder.Save(stream);
-        accessories.Outfit = originalOutfit; accessories.InvalidateVisual();
+        var placeView = new GearPlaceWindow(this); placeView.Show(); placeView.UpdateLayout(); Pastel.Capture(placeView, Path.Combine(AppContext.BaseDirectory, "ui-gear-place.png")); placeView.Close();
         try { string old = Path.Combine(AppContext.BaseDirectory, "ui-test-data"); if (Directory.Exists(old)) Directory.Delete(old, true); } catch (IOException) { }
         var sampleRepo = new ChatRepository(Path.Combine(AppContext.BaseDirectory, "ui-test-data", Guid.NewGuid().ToString("N"))); sampleRepo.Preferences.KeepTurns = 200;
         for (int n = 0; n < 200; n++) sampleRepo.Turns.Add(new ChatTurn("화면 검사 메시지 " + n, "이 대화는 화면 가상화 검사에 쓰는 예시입니다. 새 답장만 추가하고 보이는 대화만 그려요 ♡", DateTimeOffset.Now, "모모"));

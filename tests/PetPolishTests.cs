@@ -39,14 +39,14 @@ public static class PetPolishTests
         options.Normalize();
         Check(options.BubbleHideSeconds == 3600 && options.BubbleAutoHide, "Bubble duration limit and default automatic hiding");
         var oldOptions = new DesktopOptions(); oldOptions.Normalize(); Check(oldOptions.BubbleHideSeconds == null, "Old settings retain existing individual display times until configured");
-        string folder = Path.Combine(root, "delete-owned"); var game = new PetGame(folder); game.State.Coins = 100;
-        game.Buy("pink-bow"); game.Buy("star-pin"); game.Equip("pink-bow"); long coins = game.State.Coins, xp = game.State.TotalXp;
-        game.DeleteOwned("pink-bow");
-        Check(!game.State.Owned.Contains("pink-bow") && !game.State.Equipped.Values.Contains("pink-bow"), "Delete purchased item removes ownership and wearing");
-        Check(game.State.Owned.Contains("star-pin") && game.State.Coins == coins && game.State.TotalXp == xp, "Deletion preserves other items and does not refund or alter progress");
+        TestGear.Use(root); string folder = Path.Combine(root, "delete-owned"); var game = new PetGame(folder); game.State.Coins = 100;
+        game.Buy(TestGear.Bow); game.Buy(TestGear.Pin); game.Equip(TestGear.Bow); long coins = game.State.Coins, xp = game.State.TotalXp;
+        game.DeleteOwned(TestGear.Bow);
+        Check(!game.State.Owned.Contains(TestGear.Bow) && !game.State.Equipped.Values.Contains(TestGear.Bow), "Delete purchased item removes ownership and wearing");
+        Check(game.State.Owned.Contains(TestGear.Pin) && game.State.Coins == coins && game.State.TotalXp == xp, "Deletion preserves other items and does not refund or alter progress");
         OrderedStore.FlushAsync().GetAwaiter().GetResult(); var reloaded = new PetGame(folder);
-        Check(!reloaded.State.Owned.Contains("pink-bow") && !reloaded.State.Equipped.ContainsKey("head"), "Purchased item deletion persists after reload");
-        reloaded.Buy("pink-bow"); Check(reloaded.State.Owned.Contains("pink-bow") && reloaded.State.Coins == coins - 20, "Deleted shop item can be purchased again at normal price");
+        Check(!reloaded.State.Owned.Contains(TestGear.Bow) && !reloaded.State.Equipped.ContainsKey("head"), "Purchased item deletion persists after reload");
+        reloaded.Buy(TestGear.Bow); Check(reloaded.State.Owned.Contains(TestGear.Bow) && reloaded.State.Coins == coins - 20, "Deleted shop item can be purchased again at normal price");
         bool rejected = false; try { reloaded.DeleteOwned("not-owned"); } catch (InvalidOperationException) { rejected = true; }
         Check(rejected, "Unknown inventory deletion rejected");
         var custom = new CustomGear { ImagePath = "test.png", Slot = "body" }; reloaded.RegisterCustom(custom, true); reloaded.DeleteOwned(custom.Id);
