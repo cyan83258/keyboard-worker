@@ -13,7 +13,7 @@ namespace KeyboardWorker;
 //     The first part may be head / face / neck / body / effect and the last part a price; both may be left out (head, 300).
 //   * "accessories.json" in the same folder may say more about a file - above all where the picture sits on the character:
 //     [ { "file": "head_고양이 귀_300.png", "name": "고양이 귀", "slot": "head", "price": 300, "level": 1, "description": "쫑긋한 귀",
-//         "width": 42, "x": 0, "y": -6, "rotation": 0, "behind": false } ]
+//         "width": 42, "x": 0, "y": -6, "rotation": 0, "behind": false, "flip": false } ]
 //     width is a share of the character's width (5-200); x / y move the centre from the slot's anchor, in percent.
 // They are drawn like the user's own gear, but cannot be edited or deleted from inside the program.
 public static class ShopGear
@@ -32,6 +32,7 @@ public static class ShopGear
         [JsonPropertyName("y")] public double? Y { get; set; }
         [JsonPropertyName("rotation")] public double? Rotation { get; set; }
         [JsonPropertyName("behind")] public bool? Behind { get; set; }
+        [JsonPropertyName("flip")] public bool? Flip { get; set; }
     }
     // How each is drawn, and how each is sold; the same order, the same ids ("shop-…").
     public static IReadOnlyList<CustomGear> Items { get; private set; } = Array.Empty<CustomGear>();
@@ -63,7 +64,7 @@ public static class ShopGear
                     var (slot, name, price) = FromName(file); notes.TryGetValue(Path.GetFileName(file), out var note);
                     if (note?.Slot is { } chosen && CustomGear.Slots.Contains(chosen.ToLowerInvariant())) slot = chosen.ToLowerInvariant();
                     string id = "shop-" + Path.GetFileNameWithoutExtension(file).ToLowerInvariant(); if (gear.Any(g => g.Id == id)) continue;
-                    var item = new CustomGear { Id = id, Name = SafeFiles.OneLine(note?.Name, 40) is { Length: > 0 } given ? given : name, Slot = slot, ImagePath = file, WidthPercent = note?.Width ?? 35, OffsetX = note?.X ?? 0, OffsetY = note?.Y ?? 0, Rotation = note?.Rotation ?? 0, Behind = note?.Behind ?? false }.Normalized();
+                    var item = new CustomGear { Id = id, Name = SafeFiles.OneLine(note?.Name, 40) is { Length: > 0 } given ? given : name, Slot = slot, ImagePath = file, WidthPercent = note?.Width ?? 35, OffsetX = note?.X ?? 0, OffsetY = note?.Y ?? 0, Rotation = note?.Rotation ?? 0, Behind = note?.Behind ?? false, Flip = note?.Flip ?? false }.Normalized();
                     gear.Add(item); sold.Add(new ShopItem(id, item.Name, slot, Math.Clamp(note?.Price ?? price, 0, 1000000), Math.Clamp(note?.Level ?? 1, 1, 100), SafeFiles.OneLine(note?.Description, 80) is { Length: > 0 } told ? told : SlotName(slot) + " 장식"));
                 }
             }
@@ -74,6 +75,6 @@ public static class ShopGear
     public static string SlotName(string slot) => slot switch { "face" => "얼굴", "neck" => "목", "body" => "몸", "effect" => "오라", _ => "머리" };
     // The lines of accessories.json for a piece of gear the user placed by hand in the program: copied from the gear window, pasted into the file.
     public static string Describe(CustomGear gear, string file) =>
-        JsonSerializer.Serialize(new Entry { File = file, Name = gear.Name, Slot = gear.Slot, Price = StandardPrice, Level = 1, Description = "", Width = Math.Round(gear.WidthPercent, 2), X = Math.Round(gear.OffsetX, 2), Y = Math.Round(gear.OffsetY, 2), Rotation = Math.Round(gear.Rotation, 2), Behind = gear.Behind },
+        JsonSerializer.Serialize(new Entry { File = file, Name = gear.Name, Slot = gear.Slot, Price = StandardPrice, Level = 1, Description = "", Width = Math.Round(gear.WidthPercent, 2), X = Math.Round(gear.OffsetX, 2), Y = Math.Round(gear.OffsetY, 2), Rotation = Math.Round(gear.Rotation, 2), Behind = gear.Behind, Flip = gear.Flip },
             new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
 }

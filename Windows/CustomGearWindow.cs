@@ -15,7 +15,7 @@ public sealed class CustomGearWindow : Window
     readonly CustomGear original;
     readonly TextBox name = new() { MaxLength = 80 }, width = new(), x = new(), y = new(), angle = new();
     readonly ComboBox slot = new() { ItemsSource = new[] { "머리", "얼굴", "목", "몸 / 전체 의상", "오라 / 전체 장식" } };
-    readonly CheckBox behind = new() { Content = "캐릭터 뒤에 표시" }, equip = new() { Content = "저장 후 바로 장착" };
+    readonly CheckBox behind = new() { Content = "캐릭터 뒤에 표시" }, flip = new() { Content = "좌우 반전" }, equip = new() { Content = "저장 후 바로 장착" };
     readonly Image preview = new() { Width = 140, Height = 110, Stretch = Stretch.Uniform };
     readonly TextBlock file = Pastel.Text("이미지를 선택해 주세요."), status = Pastel.Text("");
     string selectedPath;
@@ -35,13 +35,13 @@ public sealed class CustomGearWindow : Window
         Field("가로 위치 보정 (-100~100%)", x, original.OffsetX);
         Field("세로 위치 보정 (-100~100%)", y, original.OffsetY);
         Field("회전 각도 (-180~180도)", angle, original.Rotation);
-        behind.IsChecked = original.Behind; equip.IsChecked = item == null || game.State.Equipped.Values.Contains(item.Id); p.Children.Add(behind); p.Children.Add(equip);
+        behind.IsChecked = original.Behind; flip.IsChecked = original.Flip; equip.IsChecked = item == null || game.State.Equipped.Values.Contains(item.Id); p.Children.Add(behind); p.Children.Add(flip); p.Children.Add(equip);
         p.Children.Add(Pastel.Card(Pastel.Text("권장: 배경이 투명한 256×256 또는 512×512 PNG\nJPG/JPEG도 지원하지만 사각형 배경이 함께 표시됩니다. 장당 20MB 이하, 가로·세로 각각 4096px 이하입니다.\n장착 위치를 기준으로 그림의 중심을 놓습니다. 머리·얼굴·목 기준점은 꾸미기·설정에서 조절하며, 몸·오라는 캐릭터 중앙이 기준입니다. 전체 의상은 너비를 100%로 설정해 보세요.", 12), true));
         var footer = new StackPanel { Margin = new Thickness(20, 0, 20, 16) }; footer.Children.Add(status); footer.Children.Add(Pastel.Button("장비 저장", async () => await Save()));
         // For whoever ships accessories with the program: the placement worked out here, as a line of accessories.json.
         var copy = Pastel.Button("배치 값 복사", () =>
         {
-            try { Clipboard.SetText(ShopGear.Describe(new CustomGear { Name = name.Text.Trim(), Slot = CustomGear.Slots[slot.SelectedIndex], WidthPercent = Number(width, 35), OffsetX = Number(x, 0), OffsetY = Number(y, 0), Rotation = Number(angle, 0), Behind = behind.IsChecked == true }, selectedPath.Length > 0 ? Path.GetFileName(selectedPath) : "파일이름.png")); status.Text = "복사했어요. 상점용 악세서리 목록(accessories.json)에 붙여 넣을 수 있어요."; }
+            try { Clipboard.SetText(ShopGear.Describe(new CustomGear { Name = name.Text.Trim(), Slot = CustomGear.Slots[slot.SelectedIndex], WidthPercent = Number(width, 35), OffsetX = Number(x, 0), OffsetY = Number(y, 0), Rotation = Number(angle, 0), Behind = behind.IsChecked == true, Flip = flip.IsChecked == true }, selectedPath.Length > 0 ? Path.GetFileName(selectedPath) : "파일이름.png")); status.Text = "복사했어요. 상점용 악세서리 목록(accessories.json)에 붙여 넣을 수 있어요."; }
             catch (System.Runtime.InteropServices.ExternalException) { status.Text = "지금은 복사할 수 없어요. 다시 눌러 주세요."; }
         }, true); copy.ToolTip = "지금 적힌 위치·크기를 프로그램에 함께 넣는 악세서리 목록(accessories.json)의 한 줄로 복사해요"; footer.Children.Add(copy);
         static double Number(TextBox box, double fallback) => double.TryParse(box.Text, out double value) && double.IsFinite(value) ? value : fallback;
@@ -79,7 +79,8 @@ public sealed class CustomGearWindow : Window
                 OffsetX = Value(x, -100, 100),
                 OffsetY = Value(y, -100, 100),
                 Rotation = Value(angle, -180, 180),
-                Behind = behind.IsChecked == true
+                Behind = behind.IsChecked == true,
+                Flip = flip.IsChecked == true
             };
             bool wear = equip.IsChecked == true; string source = selectedPath; saving = true; IsEnabled = false; status.Text = "이미지를 저장하는 중…";
             string imported = await Task.Run(() => { ImageAssets.Validate(source); return !explicitlySelected && source == original.ImagePath ? source : ImageAssets.Import(source, Storage.Root); });

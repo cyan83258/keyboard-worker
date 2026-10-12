@@ -83,6 +83,8 @@ public static class GameTests
         outfit.Places[TestGear.Bow] = new GearPlace(70, 10, 5, 400); outfit.Places["shop-gone"] = new GearPlace(1, 1, 1, 1); outfit.Normalize();
         var moved = layer.Spot("head", outfit.Wearing(TestGear.Bow)!)!.Value;
         Check(outfit.Places.Count == 1 && outfit.Places[TestGear.Bow].Rotation == 180 && Math.Abs(moved.Size.Width - 168) < .01 && moved.Centre.X > spot.Centre.X && moved.Centre.Y > spot.Centre.Y && ShopGear.Items.First(g => g.Id == TestGear.Bow).WidthPercent == 35 && outfit.Snapshot().Places.Count == 1, "A place of the user's own moves a shipped accessory without changing the one that came with the program");
+        outfit.Places[TestGear.Bow] = outfit.Places[TestGear.Bow] with { Flip = true }; outfit.Normalize(); var mirrored = new RenderTargetBitmap(240, 180, 96, 96, PixelFormats.Pbgra32); layer.InvalidateVisual(); layer.UpdateLayout(); mirrored.Render(layer);
+        Check(outfit.Wearing(TestGear.Bow)!.Flip && outfit.Places[TestGear.Bow].Flip && !ShopGear.Items.First(g => g.Id == TestGear.Bow).Flip && ShopGear.Describe(outfit.Wearing(TestGear.Bow)!, "bow_20.png").Contains("\"flip\":true") && layer.Spot("head", outfit.Wearing(TestGear.Bow)!)!.Value.Centre == moved.Centre, "An accessory can be mirrored where it sits, and the choice is kept with its place");
         var placing = new PetGame(Path.Combine(root, "game-place")); var draft = placing.State.Snapshot(); draft.Places[TestGear.Pin] = new GearPlace(50, -3, 2, 15); placing.Place(draft); OrderedStore.FlushAsync().GetAwaiter().GetResult();
         Check(new PetGame(Path.Combine(root, "game-place")).State.Places[TestGear.Pin] == new GearPlace(50, -3, 2, 15), "Places worked out by hand are saved");
         return checks;

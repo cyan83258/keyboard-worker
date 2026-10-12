@@ -26,7 +26,7 @@ public sealed class GameState
     // Everything that is drawn from a picture: the user's own gear and the accessories that came with the program.
     // Where the user moved an accessory that came with the program (by its id). Their own gear keeps its place in itself.
     public Dictionary<string, GearPlace> Places { get; set; } = new();
-    [System.Text.Json.Serialization.JsonIgnore] public IEnumerable<CustomGear> Gear => CustomItems.Concat(ShopGear.Items.Select(g => Places.TryGetValue(g.Id, out var place) ? g with { WidthPercent = place.Width, OffsetX = place.X, OffsetY = place.Y, Rotation = place.Rotation } : g));
+    [System.Text.Json.Serialization.JsonIgnore] public IEnumerable<CustomGear> Gear => CustomItems.Concat(ShopGear.Items.Select(g => Places.TryGetValue(g.Id, out var place) ? g with { WidthPercent = place.Width, OffsetX = place.X, OffsetY = place.Y, Rotation = place.Rotation, Flip = place.Flip } : g));
     public CustomGear? Wearing(string id) { foreach (var gear in Gear) if (gear.Id == id) return gear; return null; }
     public bool Enabled { get; set; } = true;
     public bool ShowBadge { get; set; } = true;
@@ -73,11 +73,11 @@ public sealed class GameState
         AccessoryScale = Safe(AccessoryScale, 1, .5, 2);
     }
 }
-// Size (a share of the character's width), offset from the slot's anchor (percent) and turn of one accessory.
-public sealed record GearPlace(double Width, double X, double Y, double Rotation)
+// Size (a share of the character's width), offset from the slot's anchor (percent), turn and mirroring of one accessory.
+public sealed record GearPlace(double Width, double X, double Y, double Rotation, bool Flip = false)
 {
-    public static GearPlace Of(CustomGear gear) => new(gear.WidthPercent, gear.OffsetX, gear.OffsetY, gear.Rotation);
-    public GearPlace Normalized() => Of(new CustomGear { WidthPercent = Width, OffsetX = X, OffsetY = Y, Rotation = Rotation }.Normalized());
+    public static GearPlace Of(CustomGear gear) => new(gear.WidthPercent, gear.OffsetX, gear.OffsetY, gear.Rotation, gear.Flip);
+    public GearPlace Normalized() => Of(new CustomGear { WidthPercent = Width, OffsetX = X, OffsetY = Y, Rotation = Rotation, Flip = Flip }.Normalized());
 }
 public sealed record GameUpdate(bool LevelUp, string Message);
 public sealed class PetGame

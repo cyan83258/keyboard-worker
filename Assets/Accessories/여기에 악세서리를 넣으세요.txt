@@ -12,10 +12,10 @@
    그림이 캐릭터 위에 어긋나 보이면, 이 폴더에 accessories.json 을 만들어 파일마다 적어 줍니다.
      [
        { "file": "head_고양이 귀_300.png", "name": "고양이 귀", "slot": "head", "price": 300, "level": 1,
-         "description": "쫑긋한 고양이 귀", "width": 42, "x": 0, "y": -6, "rotation": 0, "behind": false }
+         "description": "쫑긋한 고양이 귀", "width": 42, "x": 0, "y": -6, "rotation": 0, "behind": false, "flip": false }
      ]
    - width: 캐릭터 너비에 대한 크기(5~200%)   - x, y: 기준점에서 옮기는 정도(%)   - rotation: 회전(도)
-   - behind: true 면 캐릭터 뒤에 그립니다   - level: 이 레벨부터 살 수 있습니다
+   - behind: true 면 캐릭터 뒤에 그립니다   - flip: true 면 좌우를 뒤집어 그립니다   - level: 이 레벨부터 살 수 있습니다
 
    숫자를 쉽게 찾는 법: 프로그램의 상점 · 옷장 → '+ 내 장비 등록'에서 그림을 올리고 위치를 맞춘 다음
    '배치 값 복사'를 누르면, 위와 같은 한 줄이 복사됩니다. 그대로 붙여 넣고 가격만 고치면 됩니다.

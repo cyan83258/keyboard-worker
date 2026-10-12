@@ -14,6 +14,7 @@ public sealed record CustomGear
     public double OffsetY { get; init; }
     public double Rotation { get; init; }
     public bool Behind { get; init; }
+    public bool Flip { get; init; }      // drawn mirrored, left to right
     public static readonly string[] Slots = { "head", "face", "neck", "body", "effect" };
     public CustomGear Normalized()
     {

@@ -53,7 +53,9 @@ public sealed class AccessoryLayer : FrameworkElement
             var gear = Outfit.Wearing(pair.Value); if (gear == null || gear.Behind != BackLayer || Spot(pair.Key, gear) is not { } spot) continue;
             var area = new Rect(-spot.Size.Width / 2, -spot.Size.Height / 2, spot.Size.Width, spot.Size.Height);
             dc.PushTransform(new TranslateTransform(spot.Centre.X, spot.Centre.Y)); dc.PushTransform(new RotateTransform(gear.Rotation));
-            dc.DrawImage(CustomImage!(gear.Id), area); if (Marked == gear.Id) dc.DrawRectangle(null, outline, area);
+            if (gear.Flip) dc.PushTransform(new ScaleTransform(-1, 1));
+            dc.DrawImage(CustomImage!(gear.Id), area); if (gear.Flip) dc.Pop();
+            if (Marked == gear.Id) dc.DrawRectangle(null, outline, area);
             dc.Pop(); dc.Pop();
         }
     }

@@ -10,7 +10,7 @@ using System.Windows.Media.Imaging;
 namespace KeyboardWorker;
 
 // Placing what the character wears by hand: drag an accessory to move it, turn the wheel over it to make it larger or
-// smaller (with Shift, to turn it). The character is shown large with everything it has on, drawn by the same layers
+// smaller (with Shift, to turn it); a button mirrors it left to right. The character is shown large with everything it has on, drawn by the same layers
 // as on the desktop. Nothing changes until "저장"; the places are kept per accessory (GameState.Places / CustomGear).
 public sealed class GearPlaceWindow : Window
 {
@@ -28,6 +28,7 @@ public sealed class GearPlaceWindow : Window
         var footer = new StackPanel(); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer); footer.Children.Add(chosenName); footer.Children.Add(status);
         var buttons = new WrapPanel();
         buttons.Children.Add(Pastel.Button("저장", () => { game.Place(draft); changed = false; Close(); }));
+        buttons.Children.Add(Pastel.Button("좌우 반전", () => { if (chosen.Length == 0) { status.Text = "먼저 악세서리를 골라 주세요."; return; } Change(g => g with { Flip = !g.Flip }); }, true));
         buttons.Children.Add(Pastel.Button("고른 것 처음 위치로", Reset, true));
         var copy = Pastel.Button("배치 값 복사", Copy, true); copy.ToolTip = "고른 악세서리의 위치·크기를 프로그램에 함께 넣는 목록(accessories.json)의 한 줄로 복사해요"; buttons.Children.Add(copy);
         buttons.Children.Add(Pastel.Button("취소", () => { changed = false; Close(); }, true)); footer.Children.Add(buttons);
@@ -69,7 +70,7 @@ public sealed class GearPlaceWindow : Window
     void Choose(string id)
     {
         chosen = id; back.Marked = front.Marked = id; var gear = id.Length > 0 ? draft.Wearing(id) : null;
-        chosenName.Text = gear == null ? "악세서리를 눌러 골라 주세요." : $"고른 것: {gear.Name}  ·  크기 {gear.WidthPercent:0.#}%  ·  위치 {gear.OffsetX:0.#}, {gear.OffsetY:0.#}  ·  회전 {gear.Rotation:0.#}°"; Redraw();
+        chosenName.Text = gear == null ? "악세서리를 눌러 골라 주세요." : $"고른 것: {gear.Name}  ·  크기 {gear.WidthPercent:0.#}%  ·  위치 {gear.OffsetX:0.#}, {gear.OffsetY:0.#}  ·  회전 {gear.Rotation:0.#}°" + (gear.Flip ? "  ·  좌우 반전" : ""); Redraw();
     }
     // The chosen accessory with something about it changed: the user's own gear is changed itself, a shipped one gets a place of its own.
     void Change(Func<CustomGear, CustomGear> change)
