@@ -65,11 +65,13 @@ public sealed class ProgressWindow : Window
     bool queued;
     void Changed() { if (queued) return; queued = true; Dispatcher.BeginInvoke(() => { queued = false; Refresh(); }); }
     void Reset() { editing = ""; goalTitle.Clear(); goalSave.Content = "목표 추가"; Refresh(); }
+    // A slim, soft gauge: a pale track with the filled part on it, both rounded. Used wherever progress is shown.
     internal static Border Bar(double share, bool done)
     {
-        var track = new Grid { Height = 10, Margin = new Thickness(0, 5, 0, 0) }; track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Clamp(share, 0, 1), GridUnitType.Star) }); track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - Math.Clamp(share, 0, 1), GridUnitType.Star) });
-        track.Children.Add(new Border { Background = done ? Pastel.Hot : Pastel.Teal, CornerRadius = new CornerRadius(5) });
-        return new Border { Child = track, Background = Brushes.White, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(1), Margin = new Thickness(0, 4, 0, 0) };
+        share = Math.Clamp(double.IsFinite(share) ? share : 0, 0, 1); var line = ((SolidColorBrush)Pastel.Line).Color; var soft = new SolidColorBrush(Color.FromArgb(46, line.R, line.G, line.B)); soft.Freeze();
+        var track = new Grid { Height = 8 }; track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(share, GridUnitType.Star) }); track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - share, GridUnitType.Star) });
+        if (share > 0) track.Children.Add(new Border { Background = done ? Pastel.Hot : Pastel.Teal, CornerRadius = new CornerRadius(4), MinWidth = 8 });
+        return new Border { Child = track, Background = soft, CornerRadius = new CornerRadius(4), Margin = new Thickness(0, 7, 0, 3) };
     }
     void Refresh()
     {

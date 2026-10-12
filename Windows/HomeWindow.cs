@@ -105,47 +105,79 @@ public sealed class HomeWindow : Window
     }
 
     // ---- friends ----
+    // A small label beside a name ("대표", "둘째").
+    static Border Chip(string text) => new() { Child = new TextBlock { Text = text, Foreground = Pastel.Ink, FontSize = 11, FontWeight = FontWeights.Bold }, Background = Pastel.Paper, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(9), Padding = new Thickness(8, 1, 8, 2), VerticalAlignment = VerticalAlignment.Center };
+    static TextBlock Heading(string text) => new() { Text = text, Foreground = Pastel.Hot, FontWeight = FontWeights.Bold, FontSize = 13, Margin = new Thickness(2, 6, 0, 6) };
+    // How close, at a glance: hearts, what the closeness is called, and the number small at the right. The rest is on hover.
+    static DockPanel Closeness(int bond, string name, string detail)
+    {
+        var row = new DockPanel { Margin = new Thickness(0, 6, 0, 2), ToolTip = detail, Background = Brushes.Transparent };
+        var number = new TextBlock { Text = bond + " / 1000", Foreground = Pastel.Ink, Opacity = .6, FontSize = 11, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(number, Dock.Right); row.Children.Add(number);
+        var hearts = new HeartMeter(17) { Bond = bond, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(hearts, Dock.Left); row.Children.Add(hearts);
+        row.Children.Add(new TextBlock { Text = name, Foreground = Pastel.Ink, FontWeight = FontWeights.Bold, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), TextTrimming = TextTrimming.CharacterEllipsis });
+        return row;
+    }
+    // A card with a name, a chip beside it, and something at the right end of its top line.
+    static StackPanel Person(Panel parent, string name, string chip, bool blue, UIElement? corner = null)
+    {
+        var outer = new StackPanel(); var head = new DockPanel();
+        if (corner != null) { DockPanel.SetDock(corner, Dock.Right); head.Children.Add(corner); }
+        var title = new TextBlock { Text = name, Foreground = Pastel.Hot, FontWeight = FontWeights.Bold, FontSize = 16, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 0, 8, 0) };
+        DockPanel.SetDock(title, Dock.Left); head.Children.Add(title); if (chip.Length > 0) { var label = Chip(chip); label.HorizontalAlignment = HorizontalAlignment.Left; head.Children.Add(label); } else head.Children.Add(new Border());
+        outer.Children.Add(head); var card = Pastel.Card(outer, blue); card.Padding = new Thickness(16, 12, 16, 14); card.Margin = new Thickness(0, 0, 4, 8); parent.Children.Add(card); return outer;
+    }
+    static WrapPanel Buttons(params (string Text, Action Open, bool Main)[] actions) { var row = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) }; foreach (var (text, open, main) in actions) row.Children.Add(Small(text, open, !main)); return row; }
     void Friends()
     {
         friends.Children.Clear(); var book = buddy.Adventure; var second = buddy.SecondaryPreset; bool out2 = buddy.DisplayedCompanion != null;
-        var people = new List<(string Id, string Name, string Role)> { (buddy.CharacterId, buddy.Chat.Preferences.Profile.Name, "대표 친구") };
-        if (second != null) people.Add((second.Id, second.Profile.Name, out2 ? "둘째 친구" : "둘째 친구 (넣어 둠)"));
-        var grid = Columns(friends);
+        var people = new List<(string Id, string Name, string Role)> { (buddy.CharacterId, buddy.Chat.Preferences.Profile.Name, "대표") };
+        if (second != null) people.Add((second.Id, second.Profile.Name, out2 ? "둘째" : "둘째 · 넣어 둠"));
+
+        // Each friend: who, how close, what was done today - and the two ways to talk.
+        friends.Children.Add(Heading("내 친구")); var grid = Columns(friends);
         for (int i = 0; i < people.Count; i++)
         {
             var (id, name, role) = people[i]; var friend = book.Friend(id, name); int stage = Affection.Stage(friend.Bond);
-            var card = Box(Column(grid, i), "♡ " + name, i == 0, ("개인 페이지 · 대화 · 선물", () => buddy.OpenCharacter(id)));
-            card.Children.Add(Line(role + " · " + stage + "단계 " + Affection.Name(stage), 14, true));
-            card.Children.Add(ProgressWindow.Bar(friend.Bond / 1000.0, stage == Affection.Stages));
-            card.Children.Add(Line($"친밀도 {friend.Bond}/1000" + (Affection.ToNext(friend.Bond) is int left ? $" · 다음 단계까지 {left}" : " · 최고 단계")));
-            card.Children.Add(Line($"함께 작업 {TypingWorkClock.Format(friend.WorkMs)} · 처음 만난 날 {friend.Met}\n오늘 쓰다듬기 {friend.Pats}/10 · 선물 {friend.Gifts}/{GiftShop.PerDay} · 좋아하는 선물: {(friend.Discovered ? friend.Favorite : "아직 몰라요")}", 12));
+            var card = Person(Column(grid, i), name, role, i == 0);
+            card.Children.Add(Closeness(friend.Bond, Affection.Name(stage), $"{stage}단계 · " + (Affection.ToNext(friend.Bond) is int left ? $"다음 단계까지 {left}" : "최고 단계") + $"\n처음 만난 날 {friend.Met} · 함께 작업 {TypingWorkClock.Format(friend.WorkMs)}\n좋아하는 선물: {(friend.Discovered ? friend.Favorite : "아직 몰라요")}"));
+            card.Children.Add(Line($"오늘  쓰다듬기 {friend.Pats}/10  ·  선물 {friend.Gifts}/{GiftShop.PerDay}", 12));
+            card.Children.Add(Buttons(("마주 보기", () => buddy.OpenCharacter(id), true), ("문자", () => buddy.OpenMessenger(id), false)));
         }
         if (second == null)
         {
-            var alone = Box(friends, "두 번째 친구", false, ("친구 배치 열기", buddy.OpenDuo));
-            alone.Children.Add(Line("프리셋 하나를 둘째 친구로 불러내면 둘이 대사를 주고받고, 둘만의 관계·장면·앨범이 생겨요."));
+            var alone = Person(friends, "두 번째 친구", "", false);
+            alone.Children.Add(Line("프리셋 하나를 둘째 친구로 불러내면 둘이 대사를 주고받고, 둘만의 관계·장면·앨범이 생겨요.", 12)); alone.Children.Add(Buttons(("친구 배치 열기", buddy.OpenDuo, true)));
         }
         else
         {
+            // The two of them: how they get on, and everything that belongs to the pair.
+            friends.Children.Add(Heading("둘 사이"));
             var pair = book.Pair(buddy.CharacterId, second.Id); string day = DateTime.Now.ToString("yyyy-MM-dd");
             string sulking = pair.Mood.Sulking.Length > 0 && pair.Mood.SulkingDay == day ? (pair.Mood.Sulking == buddy.CharacterId ? people[0].Name : second.Profile.Name) : "";
-            var card = Box(friends, people[0].Name + " ♡ " + second.Profile.Name, true, ("둘만의 페이지", buddy.OpenPairPage), ("관계 설정", () => Pair(0)), ("둘만의 장면", () => Pair(1)), ("앨범", () => Pair(2)), (out2 ? "둘째 넣어 두기" : "둘째 불러내기", () => { buddy.SetCompanion(!out2); }));
-            card.Children.Add(Line(pair.Style, 14, true)); card.Children.Add(ProgressWindow.Bar(pair.Bond / 1000.0, pair.Bond >= 1000));
-            card.Children.Add(Line($"관계도 {pair.Bond}/1000 · 둘이 나눈 대화 {pair.Conversations}회 · 함께 작업 {TypingWorkClock.Format(pair.WorkMs)}"));
-            card.Children.Add(Line(!pair.Moods ? "질투·화해는 꺼져 있어요." : sulking.Length > 0 ? "지금 " + sulking + "이(가) 살짝 토라져 있어요. 말을 걸거나 쓰다듬어 주세요." : "둘 다 기분이 좋아요.", 12));
-            var last = pair.Events.LastOrDefault(); if (last != null) card.Children.Add(Line($"최근 기록 · {last.At:MM-dd} {last.Title}", 12));
+            var call = Small(out2 ? "둘째 넣어 두기" : "둘째 불러내기", () => { buddy.SetCompanion(!out2); }); call.Margin = new Thickness(0); call.ToolTip = "둘째 친구를 바탕화면에 불러내거나 넣어 둬요";
+            var card = Person(friends, people[0].Name + " ♡ " + second.Profile.Name, "", true, call); var last = pair.Events.LastOrDefault();
+            card.Children.Add(Closeness(pair.Bond, pair.Style, $"둘이 나눈 대화 {pair.Conversations}회 · 함께 작업 {TypingWorkClock.Format(pair.WorkMs)}" + (last != null ? $"\n최근 기록 · {last.At:MM-dd} {last.Title}" : "") + (pair.Moods ? "" : "\n질투·화해는 꺼져 있어요.")));
+            if (sulking.Length > 0 && pair.Moods) card.Children.Add(Line("지금 " + sulking + "이(가) 살짝 토라져 있어요. 말을 걸거나 쓰다듬어 주세요.", 12));
+            card.Children.Add(Buttons(("둘만의 페이지", buddy.OpenPairPage, true), ("관계 설정", () => Pair(0), false), ("둘만의 장면", () => Pair(1), false), ("앨범", () => Pair(2), false)));
         }
         var others = buddy.StageCharacters().Where(c => people.All(p => p.Id != c.Id)).ToArray();
         if (others.Length > 0)
         {
-            var more = Box(friends, "다른 캐릭터의 페이지"); var row = new WrapPanel();
-            foreach (var other in others) { var chosen = other; row.Children.Add(Small(other.Title, () => buddy.OpenCharacter(chosen.Id))); }
-            more.Children.Add(Line("저장해 둔 프리셋의 캐릭터와도 개인 페이지에서 이야기할 수 있어요.", 12)); more.Children.Add(row);
+            friends.Children.Add(Heading("다른 캐릭터")); var row = new WrapPanel { Margin = new Thickness(0, -6, 0, 8) };
+            foreach (var other in others) { var chosen = other; var open = Small(other.Title, () => buddy.OpenCharacter(chosen.Id)); open.ToolTip = "저장해 둔 프리셋의 캐릭터와 마주 보고 이야기해요"; row.Children.Add(open); }
+            friends.Children.Add(row);
         }
+        friends.Children.Add(Heading("이야기 퀘스트"));
         var quests = book.State.Quests.Where(q => q.StoryId.Length == 0).ToArray();
-        var story = Box(friends, "이야기 퀘스트", false, ("퀘스트 보기", () => buddy.OpenAdventure(2)), ("이야기책", () => buddy.OpenAdventure(3)));
-        if (quests.Length == 0) story.Children.Add(Line("진행 중인 퀘스트가 없어요. AI를 연결하면 작업 시간으로 완성하는 작은 이야기를 받을 수 있어요."));
-        foreach (var quest in quests) { story.Children.Add(Line("☆ " + quest.Title + $" · {quest.ProgressMs / 60000}/{quest.Minutes}분" + (quest.Ready ? " · 완료 이야기 대기" : ""), 13, true)); story.Children.Add(ProgressWindow.Bar(quest.ProgressMs / (quest.Minutes * 60000.0), quest.Ready)); }
+        var story = Person(friends, quests.Length == 0 ? "진행 중인 퀘스트 없음" : quests.Length == 1 ? quests[0].Title : $"진행 중 {quests.Length}개", "", false);
+        if (quests.Length == 0) story.Children.Add(Line("AI를 연결하면 작업 시간으로 완성하는 작은 이야기를 받을 수 있어요.", 12));
+        foreach (var quest in quests)
+        {
+            var head = new DockPanel { Margin = new Thickness(0, 6, 0, 0) }; var amount = new TextBlock { Text = quest.Ready ? "완료 이야기 대기" : $"{quest.ProgressMs / 60000} / {quest.Minutes}분", Foreground = Pastel.Ink, Opacity = .6, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+            DockPanel.SetDock(amount, Dock.Right); head.Children.Add(amount); head.Children.Add(new TextBlock { Text = quests.Length == 1 ? "작업하는 동안 조금씩 채워져요" : quest.Title, Foreground = Pastel.Ink, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis });
+            story.Children.Add(head); story.Children.Add(ProgressWindow.Bar(quest.ProgressMs / (quest.Minutes * 60000.0), quest.Ready));
+        }
+        story.Children.Add(Buttons(("퀘스트 보기", () => buddy.OpenAdventure(2), true), ("이야기책", () => buddy.OpenAdventure(3), false)));
     }
     void Pair(int page) { buddy.OpenPair(); buddy.ShowPairPage(page); }
 
