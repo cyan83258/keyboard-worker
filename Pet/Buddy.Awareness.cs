@@ -61,5 +61,5 @@ public sealed partial class Buddy
         }
         return text;
     }
-    public void OpenAwareness(Window owner) => new AwarenessWindow(this) { Owner = owner, ShowInTaskbar = false }.ShowDialog();
+    public void OpenAwareness(Window? owner) => new AwarenessWindow(this) { Owner = owner, ShowInTaskbar = false }.ShowDialog();
 }

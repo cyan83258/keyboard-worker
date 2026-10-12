@@ -49,6 +49,11 @@ public sealed class Preferences
     public Dictionary<string, string> LineBook { get; set; } = new();
     public Dictionary<string, string> VoicePaths { get; set; } = new();
     public VoiceOptions Voice { get; set; } = new();
+    // The pets speak first at all (greetings, nudges, random lines, remarks, the two talking). Off: they only answer.
+    public bool Speaking { get; set; } = true;
+    // Lines the pets say first may be made by AI. Null until first decided: on for those who already used AI lines, else off.
+    public bool? AiSpeaking { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore] public bool AiOn => Speaking && AiSpeaking == true;
     public bool LocalRandom { get; set; } = true;
     public int LocalRandomMinMinutes { get; set; } = 15;
     public int LocalRandomMaxMinutes { get; set; } = 30;

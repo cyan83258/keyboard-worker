@@ -20,7 +20,6 @@ public static class DailyTests
         var game = new AppInFront("eldenring", "", "ELDEN RING", "game"); var editor = new AppInFront("Code", "", "Visual Studio Code", "work");
         Check(UsageLog.Span(25 * 60000) == "25분" && UsageLog.Span(120 * 60000) == "2시간" && UsageLog.Span(130 * 60000) == "2시간 10분" && UsageLog.Span(-5) == "0분", "Durations read naturally");
         Check(!AppKinds.Instruction(game, 10 * 60000).Contains("쓴 시간은") && AppKinds.Instruction(game, 45 * 60000).Contains("45분") && AppKinds.Instruction(game, 130 * 60000).Contains("2시간 10분") && AppKinds.Instruction(game, 130 * 60000).Contains("길다"), "Long use is mentioned to the AI once it is worth mentioning");
-        Check(AppKinds.LocalLine(game, 0, 130 * 60000).Contains("2시간 10분") && AppKinds.LocalLine(editor, 1, 61 * 60000).Contains("1시간 1분") && !AppKinds.LocalLine(game, 0, 30 * 60000).Contains("{time}"), "Ready-made lines switch to the time spent after an hour");
         Check(AppKinds.Context(editor, 90 * 60000).Contains("1시간 30분") && !AppKinds.Context(editor).Contains("쓴 시간은"), "Chat knows how long the program has been used today");
 
         // Daily log

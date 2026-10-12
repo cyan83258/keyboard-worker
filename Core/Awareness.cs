@@ -18,7 +18,7 @@ public sealed record AwarenessOptions
     public bool GameLight { get; init; } = true;     // run lighter while a game or full-screen program is in front
     public bool GameHide { get; init; }              // hide the pets entirely while a game is in front
     public bool Clock { get; init; } = true;         // tell the AI the time of day and the weekday
-    public bool CommentsUseAi { get; init; } = true; // off: remarks about programs use ready-made lines only (no AI request)
+    public bool CommentsUseAi { get; init; } = true; // off: remarks about programs use the lines the user wrote only (no AI request)
     public AwarenessOptions Normalize() => this with { CommentMinutes = Math.Clamp(CommentMinutes, 5, 720), Games = (Games ?? "")[..Math.Min((Games ?? "").Length, 2000)], Work = (Work ?? "")[..Math.Min((Work ?? "").Length, 2000)] };
 }
 
@@ -74,18 +74,7 @@ public static class AppKinds
         title = SafeFiles.OneLine(title, 60).Replace('"', '\''); if (title.Length == 0) title = process; if (titles.Count > 200) titles.Clear(); return titles[path] = title;
     }
 
-    static readonly string[] gameLines = { "{app} 켰네… 할 일은 다 하고 노는 거지?", "또 {app}? 딱 한 판만 하고 돌아오는 거다!", "게임도 좋지만 눈이랑 손목은 좀 쉬어 가면서 해.", "{app} 재밌어 보이긴 하네. 그래도 적당히 하자?" };
-    static readonly string[] workLines = { "오, {app} 켰구나. 열심히 하는 모습 멋져 ♡", "{app} 작업 중이네. 천천히, 꾸준히 가자!", "집중하는 거 보기 좋다. 옆에서 응원할게.", "{app} 여는 것부터가 반은 한 거야. 잘하고 있어!" };
-    // After an hour in the same program the remark is about the time spent.
-    static readonly string[] longGameLines = { "{app} 벌써 오늘 {time}째야. 슬슬 쉬었다 하는 게 어때?", "오늘 {app}만 {time}… 눈이랑 손목 좀 챙겨!", "{time}이나 했으면 이제 한 판만 더 하고 끝내자, 응?" };
-    static readonly string[] longWorkLines = { "{app} 오늘 {time}째네, 대단해. 잠깐 스트레칭하고 하자.", "오늘 {app} 작업만 {time}! 물 한 잔 마시고 와.", "{time}이나 집중했구나. 정말 잘하고 있어 ♡" };
     const long Long = 60 * 60000L, Worth = 20 * 60000L;
-    // A ready-made line for when no AI is used. todayMs: how long the program has been in front today.
-    public static string LocalLine(AppInFront app, int pick, long todayMs = 0)
-    {
-        var lines = todayMs >= Long ? (app.Kind == "game" ? longGameLines : longWorkLines) : app.Kind == "game" ? gameLines : workLines;
-        return lines[Math.Abs(pick) % lines.Length].Replace("{app}", app.Title).Replace("{time}", UsageLog.Span(todayMs));
-    }
     static string Spent(long todayMs) => todayMs < Worth ? "" : $" 오늘 이 프로그램을 쓴 시간은 약 {UsageLog.Span(todayMs)}입니다.";
     public static string Instruction(AppInFront app, long todayMs = 0) =>
         $"앱이 요청한 한마디입니다. 사용자가 지금 \"{app.Title}\"({Label(app.Kind)})을 메인으로 쓰고 있습니다.{Spent(todayMs)}{SafeFiles.NotAnInstruction} " +

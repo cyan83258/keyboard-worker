@@ -106,6 +106,16 @@ public static class RoomTests
         Check(ShopGear.Items.Count == 0 && !gone.State.Equipped.ContainsKey("head") && !gone.State.Owned.Contains("shop-head_고양이 귀_300"), "Without the folder there are none, and what is no longer sold leaves the wardrobe");
         Check(ShopGear.Describe(new CustomGear { Name = "고양이 귀", Slot = "head", WidthPercent = 42, OffsetY = -6 }, "head_고양이 귀_300.png") is { } copied && copied.Contains("\"file\":\"head_고양이 귀_300.png\"") && copied.Contains("\"width\":42") && copied.Contains("\"y\":-6") && copied.Contains("\"behind\":false"), "A placement worked out in the program is written as a line of the list");
 
+        // ---- speaking first: two switches over everything ----
+        var speech = new Preferences();
+        Check(speech.Speaking && speech.AiSpeaking == null && !speech.AiOn, "New settings speak first, with AI lines undecided (so off)");
+        QuickToggles.Find("ai-speaking")!.Set!(speech, true); bool both = speech.AiOn; QuickToggles.Find("speaking")!.Set!(speech, false);
+        Check(both && !speech.Speaking && speech.AiSpeaking == true && !speech.AiOn && speech.Snapshot().AiSpeaking == true && System.Text.Json.JsonSerializer.Deserialize<Preferences>(System.Text.Json.JsonSerializer.Serialize(speech))!.AiSpeaking == true, "AI lines need both switches; the choice is kept");
+        var spoken = QuickToggles.All.Where(t => QuickToggles.Speaking.Contains(t.Group)).ToArray();
+        Check(spoken.Count(t => t.Group == QuickToggles.Speak) == 2 && spoken.Count(t => t.Group == QuickToggles.SpeakAi) == 6 && spoken.Count(t => t.Group == QuickToggles.SpeakOwn) == 4 && new[] { "ai-nudge", "ai-random", "duo-talk", "remarks-ai", "music-talk", "quests", "local", "greetings", "remarks" }.All(k => spoken.Any(t => t.Key == k)), "Everything the pets say first is switched in one place");
+        var probeSettings = new Preferences(); QuickToggles.Find("remarks-ai")!.Set!(probeSettings, false); QuickToggles.Find("music-talk")!.Set!(probeSettings, false);
+        Check(!probeSettings.Awareness.CommentsUseAi && !probeSettings.Music.AiConversation && probeSettings.Awareness.Comments, "The AI's remarks and its talk of songs have switches of their own");
+
         // ---- back to how it was first installed ----
         string resetHome = Path.Combine(home, "reset"); Directory.CreateDirectory(Path.Combine(resetHome, "images")); File.WriteAllText(Path.Combine(resetHome, "settings.json"), "{}"); File.WriteAllText(Path.Combine(resetHome, "images", "a.png"), "x");
         Check(FactoryReset.ApplyPending(resetHome) == null && File.Exists(Path.Combine(resetHome, "settings.json")), "Nothing is erased unless a reset was staged");

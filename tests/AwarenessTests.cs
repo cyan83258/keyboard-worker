@@ -32,7 +32,6 @@ public static class AwarenessTests
         var normal = new AwarenessOptions { CommentMinutes = 1, Games = null!, Work = new string('x', 5000) }.Normalize();
         Check(normal.CommentMinutes == 5 && normal.Games == "" && normal.Work.Length == 2000 && new AwarenessOptions().GameLight && new Preferences().Awareness.Apps, "Awareness options are bounded and on by default");
         var game = new AppInFront("eldenring", @"D:\Games\ELDEN RING\eldenring.exe", "ELDEN RING", "game"); var editor = new AppInFront("Code", "", "Visual Studio Code", "work");
-        Check(AppKinds.LocalLine(game, 0).Contains("ELDEN RING") && !AppKinds.LocalLine(game, 3).Contains("{app}") && AppKinds.LocalLine(editor, 0).Contains("Visual Studio Code"), "Ready-made lines name the program");
         Check(AppKinds.Instruction(game).Contains("핀잔") && AppKinds.Instruction(editor).Contains("격려") && AppKinds.Instruction(game).Contains("{last_line}") && AppKinds.Context(editor).Contains("Visual Studio Code") && AppKinds.Context(new AppInFront()) == "", "AI instructions tease about games and praise work");
 
         var video = new SongState("고양이 브이로그", "냥이 채널", true, "Chrome", false, true);

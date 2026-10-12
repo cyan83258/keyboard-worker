@@ -107,6 +107,10 @@ public sealed partial class Buddy
     public void OpenHome(int page) { OpenHome(); (homeWindow as HomeWindow)?.ShowPage(page); }
     public void OpenProgress() => Open(ref progressWindow, () => new ProgressWindow(this), w => progressWindow = w);
     public void OpenProgress(int page) { OpenProgress(); (progressWindow as ProgressWindow)?.ShowPage(page); }
+    // Everything the pets say first, switched in one place; and the intervals and prompts of the AI's lines.
+    Window? speechWindow;
+    public void OpenSpeech() => Open(ref speechWindow, () => new SpeechWindow(this), w => speechWindow = w);
+    public void OpenAutomatic() => new AutomaticDialogueWindow(this) { ShowInTaskbar = false }.ShowDialog();
     public void OpenQuickPanel() => Open(ref quickPanel, () => new QuickPanelWindow(this), w => quickPanel = w);
     public void OpenChatSearch() => Open(ref chatSearch, () => new ChatSearchWindow(this), w => chatSearch = w);
     public void OpenStorage(Window? owner = null) { var window = new AssetCleanupWindow(this) { ShowInTaskbar = false }; if (owner != null) window.Owner = owner; window.ShowDialog(); }
