@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>KeyboardWorker</AssemblyName>
-    <Version>2.0.1</Version>
+    <Version>2.1.0</Version>
     <!-- Where the "업데이트 확인" button looks for new versions: owner/repository on GitHub (public). Leave empty for no update address.
          To publish an update: raise Version above, run tools\make-dist.ps1, and attach dist\KeyboardWorker-win-x64.zip to a GitHub release tagged v<Version>. -->
     <UpdateRepository>cyan83258/keyboard-worker</UpdateRepository>

@@ -12,16 +12,14 @@ public sealed class GameWindow : Window
     readonly PetGame game;
     readonly TextBlock summary = Pastel.Text("", 20), progress = Pastel.Text(""), goals = Pastel.Text(""), badges = Pastel.Text(""), status = Pastel.Text("");
     readonly ProgressBar xp = new() { Height = 12, Maximum = 1, Margin = new Thickness(0, 6, 0, 12), Foreground = Pastel.Pink };
-    readonly StackPanel shop = new(), inventory = new();
-    readonly LazyImageCache previewCache;
-    readonly Dictionary<string, System.Windows.Controls.Image> previews = new();
+    readonly GearShelf shop, inventory;
     readonly Dictionary<string, Button> questButtons = new();
     readonly Dictionary<string, CheckBox> toggles = new();
     readonly Dictionary<string, Slider> anchors = new();
     readonly System.Windows.Threading.DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
     public GameWindow(Buddy buddy)
     {
-        this.buddy = buddy; game = buddy.Game; previewCache = new(Dispatcher, UpdatePreviews);
+        this.buddy = buddy; game = buddy.Game; shop = new GearShelf(Bought, _ => null); inventory = new GearShelf(tile => Wear(tile.Id, tile.Name), Options);
         var root = new DockPanel { Margin = new Thickness(18) }; var footer = new StackPanel(); footer.Children.Add(status); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
         var header = new StackPanel(); header.Children.Add(summary); header.Children.Add(xp); header.Children.Add(progress); DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
         var tabs = new TabControl { Background = Pastel.Paper, BorderBrush = Pastel.Pink }; root.Children.Add(tabs);
@@ -40,10 +38,11 @@ public sealed class GameWindow : Window
         growth.Children.Add(Pastel.Text("기념 배지", 19)); growth.Children.Add(badges);
         growth.Children.Add(Pastel.Text("목표는 날짜가 바뀌면 새로 시작하지만 레벨·코인·아이템·친밀도는 유지됩니다. 쉬어도 벌점이나 감소는 없어요. 성장 기록은 캐릭터 프리셋을 바꿔도 이어집니다.", 12));
         var store = Tab("상점"); store.Children.Add(shop);
-        var closet = Tab("옷장"); closet.Children.Add(Pastel.Text("머리·얼굴·목·몸·오라를 한 개씩 장착할 수 있어요. PNG/JPG 캐릭터에도 장식이 겹쳐 표시됩니다."));
-        closet.Children.Add(Pastel.Button("+ 내 장비 등록 (PNG / JPG)", () => new CustomGearWindow(game) { Owner = this, ShowInTaskbar = false }.ShowDialog(), true));
-        var place = Pastel.Button("악세서리 위치 편집", () => new GearPlaceWindow(buddy) { Owner = this, ShowInTaskbar = false }.ShowDialog(), true); place.ToolTip = "입고 있는 악세서리를 끌어서 옮기고, 휠로 크기를 바꿔요"; closet.Children.Add(place); closet.Children.Add(inventory);
-        inventory.IsVisibleChanged += (_, _) => UpdatePreviews();
+        store.Children.Insert(0, new TextBlock { Text = "누르면 사서 바로 입혀요. 이미 가진 것은 누르면 입고 벗어요.", Foreground = Pastel.Ink, FontSize = 12, Margin = new Thickness(0, 0, 0, 6) });
+        var closet = Tab("옷장"); closet.Children.Add(new TextBlock { Text = "누르면 입고, 다시 누르면 벗어요. 오른쪽 클릭: 수정 · 삭제. 자리마다 하나씩 입을 수 있어요.", Foreground = Pastel.Ink, FontSize = 12, Margin = new Thickness(0, 0, 0, 6) });
+        var tools = new WrapPanel { Margin = new Thickness(0, 0, 0, 2) };
+        tools.Children.Add(Pastel.Button("+ 내 장비 등록 (PNG / JPG)", () => new CustomGearWindow(game) { Owner = this, ShowInTaskbar = false }.ShowDialog(), true));
+        var place = Pastel.Button("악세서리 위치 편집", Place, true); place.ToolTip = "입고 있는 악세서리를 끌어서 옮기고, 휠로 크기를 바꿔요"; tools.Children.Add(place); closet.Children.Add(tools); closet.Children.Add(inventory);
         var options = Tab("꾸미기·설정");
         Toggle(options, "Enabled", "게임 성장·보상 기능 사용", game.State.Enabled); Toggle(options, "ShowBadge", "캐릭터 아래 레벨·코인 버튼 표시", game.State.ShowBadge);
         Toggle(options, "ShowAccessories", "장착한 액세서리 표시", game.State.ShowAccessories); Toggle(options, "Announcements", "레벨업·목표 보상 말풍선 안내", game.State.Announcements);
@@ -69,7 +68,7 @@ public sealed class GameWindow : Window
             foreach (var pair in anchors) typeof(GameState).GetProperty(pair.Key)!.SetValue(next, pair.Value.Value); game.Options(next); status.Text = "저장했어요 ♡";
         })));
         Pastel.Window(this, "친구의 작은 모험", root, 780, 800); game.Changed += Rebuild; timer.Tick += (_, _) => Refresh(); timer.Start();
-        Closed += (_, _) => { timer.Stop(); game.Changed -= Rebuild; previewCache.Dispose(); game.Save(); }; Rebuild();
+        Closed += (_, _) => { timer.Stop(); game.Changed -= Rebuild; game.Save(); }; Rebuild();
     }
     void Toggle(StackPanel p, string key, string text, bool value) { var c = new CheckBox { Content = text, IsChecked = value }; toggles[key] = c; p.Children.Add(c); }
     void Slider(StackPanel p, string key, string text, double value, double min, double max)
@@ -92,58 +91,53 @@ public sealed class GameWindow : Window
         }
         badges.Text = game.State.Badges.Count == 0 ? "첫 작업, 첫 쇼핑, 목표 달성으로 기념 배지를 모아 보세요." : string.Join("\n", game.State.Badges.Select(id => "☆ " + PetGame.BadgeNames[id]));
     }
+    void Place() => new GearPlaceWindow(buddy) { Owner = this, ShowInTaskbar = false }.ShowDialog();
+    bool Worn(string slot, string id) => game.State.Equipped.GetValueOrDefault(slot, "") == id;
+    // The shop sells the accessories that came with the program; the wardrobe holds what was bought and the user's own gear.
     void Rebuild()
     {
-        Refresh(); shop.Children.Clear(); inventory.Children.Clear(); previews.Clear();
-        previewCache.Configure(new Preferences { ImagePaths = game.State.CustomItems.ToDictionary(c => c.Id, c => c.ImagePath) }, 120);
-        // The accessories that came with the program as pictures (Assets\Accessories).
-        if (ShopGear.Catalog.Count == 0) shop.Children.Add(Pastel.Text("아직 파는 악세서리가 없어요. 내 그림은 옷장의 '+ 내 장비 등록'으로 바로 입힐 수 있어요.", 13));
-        foreach (var item in ShopGear.Catalog)
+        Refresh(); var owned = game.State.Owned;
+        shop.Show(ShopGear.Catalog.Select(item =>
         {
-            var content = new DockPanel();
-            var icon = StageParts.Picture(ShopGear.Items.First(g => g.Id == item.Id).ImagePath, 70); icon.Margin = new Thickness(5, 0, 17, 0);
-            DockPanel.SetDock(icon, Dock.Left);
-            content.Children.Add(icon);
-            var p = new StackPanel(); p.Children.Add(Pastel.Text($"{item.Name} · {item.Price}코인 · Lv.{item.Level}", 17)); p.Children.Add(Pastel.Text(item.Description, 12));
-            bool owned = game.State.Owned.Contains(item.Id);
-            var button = Pastel.Button(owned ? "보유 중 · 장착" : "구매하기", () => Run(() => { if (!game.State.Owned.Contains(item.Id)) game.Buy(item.Id); game.Equip(item.Id); status.Text = item.Name + " 장착했어요 ♡"; }), true);
-            button.IsEnabled = owned || (game.Level >= item.Level && game.State.Coins >= item.Price); p.Children.Add(button); content.Children.Add(p); shop.Children.Add(Pastel.Card(content));
-            if (owned)
-            {
-                var row = new StackPanel(); bool equipped = game.State.Equipped.GetValueOrDefault(item.Slot, "") == item.Id;
-                row.Children.Add(Pastel.Text(item.Name + (equipped ? " · 장착 중" : ""), 17));
-                row.Children.Add(Pastel.Button(equipped ? "벗기" : "장착", () => Run(() => { if (game.State.Equipped.GetValueOrDefault(item.Slot, "") == item.Id) game.Remove(item.Slot); else game.Equip(item.Id); }), true));
-                inventory.Children.Add(Pastel.Card(row));
-                row.Children.Add(Pastel.Button("옷장에서 삭제", () => DeleteItem(item.Id, item.Name, false)));
-            }
-        }
-        foreach (var custom in game.State.CustomItems)
-        {
-            var row = new StackPanel(); bool equipped = game.State.Equipped.GetValueOrDefault(custom.Slot, "") == custom.Id;
-            row.Children.Add(Pastel.Text(custom.Name + " · 내 장비" + (equipped ? " · 장착 중" : ""), 17));
-            var picture = new Image { Width = 90, Height = 70, Stretch = System.Windows.Media.Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Left };
-            previews[custom.Id] = picture;
-            row.Children.Add(picture);
-            var actions = new WrapPanel();
-            actions.Children.Add(Pastel.Button(equipped ? "벗기" : "장착", () => Run(() => { if (game.State.Equipped.GetValueOrDefault(custom.Slot, "") == custom.Id) game.Remove(custom.Slot); else game.Equip(custom.Id); }), true));
-            actions.Children.Add(Pastel.Button("수정", () => new CustomGearWindow(game, custom) { Owner = this, ShowInTaskbar = false }.ShowDialog()));
-            actions.Children.Add(Pastel.Button("옷장에서 삭제", () => DeleteItem(custom.Id, custom.Name, true))); row.Children.Add(actions); inventory.Children.Add(Pastel.Card(row));
-        }
-        UpdatePreviews();
-        if (game.State.Owned.Count == 0) inventory.Children.Add(Pastel.Text("아직 아이템이 없어요. 시작 선물로 상점에서 작은 장식을 골라 보세요 ♡"));
+            bool mine = owned.Contains(item.Id), worn = Worn(item.Slot, item.Id), can = mine || (game.Level >= item.Level && game.State.Coins >= item.Price);
+            string note = worn ? "장착 중" : mine ? "보유 중" : item.Price + "코인" + (item.Level > 1 ? " · Lv." + item.Level : "");
+            return new GearShelf.Tile(item.Id, item.Name, item.Slot, ShopGear.Items.First(g => g.Id == item.Id).ImagePath, note, worn, !can, item.Description + (mine ? "" : game.Level < item.Level ? $"\nLv.{item.Level}부터 살 수 있어요" : game.State.Coins < item.Price ? "\n코인이 부족해요" : "\n누르면 사서 입혀요"));
+        }), "아직 파는 악세서리가 없어요. 내 그림은 옷장의 '+ 내 장비 등록'으로 바로 입힐 수 있어요.");
+        inventory.Show(game.State.Gear.Where(g => owned.Contains(g.Id)).Select(g => new GearShelf.Tile(g.Id, g.Name, g.Slot, g.ImagePath, Worn(g.Slot, g.Id) ? "장착 중" : ShopGear.Has(g.Id) ? "" : "내 장비", Worn(g.Slot, g.Id), false, "누르면 입고 벗어요 · 오른쪽 클릭: 더 보기")),
+            "아직 아이템이 없어요. 상점에서 골라 보거나 '+ 내 장비 등록'으로 내 그림을 넣어 보세요 ♡");
     }
-    void UpdatePreviews()
+    // A click in the shop: what is owned is put on or taken off; what is not is bought (after asking) and put on.
+    void Bought(GearShelf.Tile tile)
     {
-        if (!inventory.IsVisible) return;
-        foreach (var pair in previews) { var image = previewCache.Get(pair.Key); if (image != null && !ReferenceEquals(pair.Value.Source, image)) pair.Value.Source = image; }
+        if (game.State.Owned.Contains(tile.Id)) { Wear(tile.Id, tile.Name); return; }
+        var item = ShopGear.Catalog.First(i => i.Id == tile.Id);
+        if (game.Level < item.Level) { status.Text = $"{item.Name}은(는) Lv.{item.Level}부터 살 수 있어요."; return; }
+        if (game.State.Coins < item.Price) { status.Text = $"코인이 부족해요. ({item.Price}코인 필요 · 보유 {game.State.Coins:N0}코인)"; return; }
+        if (MessageBox.Show(this, $"{item.Name}을(를) {item.Price}코인에 살까요?", "상점", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        Run(() => { game.Buy(item.Id); game.Equip(item.Id); status.Text = item.Name + " 장착했어요 ♡"; });
+    }
+    void Wear(string id, string name) => Run(() =>
+    {
+        var gear = game.State.Wearing(id); if (gear == null) return;
+        if (Worn(gear.Slot, id)) { game.Remove(gear.Slot); status.Text = name + " 벗었어요."; } else { game.Equip(id); status.Text = name + " 장착했어요 ♡"; }
+    });
+    // The right-click menu of the wardrobe.
+    ContextMenu Options(GearShelf.Tile tile)
+    {
+        var menu = new ContextMenu(); void Add(string text, Action action) { var item = new MenuItem { Header = text }; item.Click += (_, _) => action(); menu.Items.Add(item); }
+        var custom = game.State.CustomItems.Find(c => c.Id == tile.Id);
+        Add(Worn(tile.Slot, tile.Id) ? "벗기" : "장착", () => Wear(tile.Id, tile.Name));
+        if (custom != null) Add("수정…", () => new CustomGearWindow(game, custom) { Owner = this, ShowInTaskbar = false }.ShowDialog());
+        Add("위치 편집… (입고 있는 것)", Place);
+        Add("옷장에서 삭제", () => DeleteItem(tile.Id, tile.Name, custom != null));
+        return menu;
     }
     void DeleteItem(string id, string name, bool custom) => Run(() =>
     {
         string detail = custom ? "장비 등록과 착용이 해제됩니다. 원본 이미지 파일은 유지됩니다." : "보유와 착용이 해제됩니다. 코인은 환불되지 않으며 상점에서 다시 구매할 수 있습니다.";
         if (MessageBox.Show(this, name + " 장비를 옷장에서 삭제할까요?\n" + detail, "장비 삭제", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
         game.DeleteOwned(id); status.Text = name + " 장비를 삭제했어요.";
-    });
-    public void CaptureTabs(string path)
+    });    public void CaptureTabs(string path)
     {
         var grid = (Grid)((Border)Content).Child; var dock = (DockPanel)grid.Children[1]; var tabs = dock.Children.OfType<TabControl>().Single();
         for (int n = 0; n < tabs.Items.Count; n++) { tabs.SelectedIndex = n; UpdateLayout(); Pastel.Capture(this, System.IO.Path.Combine(path, "ui-game-tab-" + n + ".png")); }

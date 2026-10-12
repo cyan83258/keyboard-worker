@@ -1,0 +1,8 @@
+[
+  {"file":"head_쥐 머리띠_300.png","name":"쥐 머리띠","slot":"head","price":300,"level":1,"description":"동글동글한 쥐 귀 머리띠","width":62.68,"x":-9.27,"y":10,"rotation":0,"behind":false,"flip":true},
+  {"file":"head_핑크 땡땡이 리본_250.png","name":"핑크 땡땡이 리본","slot":"head","price":250,"level":1,"description":"분홍 물방울무늬 리본","width":49.65,"x":-24.00,"y":19.27,"rotation":0,"behind":false,"flip":false},
+  {"file":"head_양 뿔_400.png","name":"양 뿔","slot":"head","price":400,"level":1,"description":"돌돌 말린 양 뿔","width":62.68,"x":-11.27,"y":15.82,"rotation":0,"behind":false,"flip":true},
+  {"file":"head_흰색 고양이 귀_350.png","name":"흰색 고양이 귀","slot":"head","price":350,"level":1,"description":"쫑긋 선 하얀 고양이 귀","width":59.13,"x":-10.18,"y":10.55,"rotation":0,"behind":false,"flip":true},
+  {"file":"head_토끼 모자_500.png","name":"토끼 모자","slot":"head","price":500,"level":1,"description":"긴 귀가 달린 토끼 모자","width":88.91,"x":-15.82,"y":16.73,"rotation":0,"behind":false,"flip":true},
+  {"file":"head_은하수 토끼 베레모_700.png","name":"은하수 토끼 베레모","slot":"head","price":700,"level":1,"description":"별이 내려앉은 토끼 베레모","width":105.90,"x":-10.73,"y":34.55,"rotation":0,"behind":false,"flip":true}
+]
