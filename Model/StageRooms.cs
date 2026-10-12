@@ -31,6 +31,7 @@ public sealed class StageRoomState
     public Dictionary<string, StageRoomSet> Sets { get; set; } = new();   // by page: "character", "character|mode" or "pair:a+b"
     public string SummaryConnection { get; set; } = "";                    // name of the AI connection that writes summaries; "" = the one in use
     public int SummaryEvery { get; set; } = 10;                            // new exchanges before the memory is brought up to date
+    public bool HidePanel { get; set; }                                    // the list of rooms on the pages is folded away
 }
 
 // The chat rooms of the pages (stage-rooms.json). A page always has at least one room.

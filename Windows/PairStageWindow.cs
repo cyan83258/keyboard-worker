@@ -16,9 +16,9 @@ namespace KeyboardWorker;
 public sealed class PairStageWindow : Window
 {
     readonly Buddy buddy; readonly StageView view = new(); readonly HeartMeter hearts = new(18);
-    readonly ComboBox first = new() { DisplayMemberPath = "Label", MinWidth = 150 }, second = new() { DisplayMemberPath = "Label", MinWidth = 150 }, rooms = new() { DisplayMemberPath = "Name", MinWidth = 110, Margin = new Thickness(10, 0, 0, 0), ToolTip = "채팅방 (방마다 장면이 따로 이어져요)" }, kind = new() { DisplayMemberPath = "Label", MinWidth = 150, Margin = new Thickness(0, 0, 6, 0) };
+    readonly ComboBox first = new() { DisplayMemberPath = "Label", MinWidth = 150 }, second = new() { DisplayMemberPath = "Label", MinWidth = 150 }, kind = new() { DisplayMemberPath = "Label", MinWidth = 150, Margin = new Thickness(0, 0, 6, 0) };
     readonly TextBlock bond = new() { FontWeight = FontWeights.Bold, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(3, 0, 7, 1) }, status = Pastel.Text("", 12);
-    readonly TextBox input = new() { MaxLength = 2000, Padding = new Thickness(10, 7, 10, 7), FontSize = 15 }; readonly Button go, stop;
+    readonly TextBox input = new() { MaxLength = 2000, Padding = new Thickness(10, 7, 10, 7), FontSize = 15 }; readonly Button go, stop; readonly StageRoomPanel rooms;
     sealed record Choice(Buddy.StageCharacter Character, string Label); sealed record Kind(string Key, string Label);
     CancellationTokenSource? request; List<PairLine> lines = new(); int at; bool busy, filling;
     Buddy.StageCharacter A => ((Choice)first.SelectedItem).Character; Buddy.StageCharacter B => ((Choice)second.SelectedItem).Character;
@@ -27,12 +27,13 @@ public sealed class PairStageWindow : Window
         this.buddy = buddy; view.LowPower = buddy.Pref.LowPower; bond.Foreground = Pastel.Hot; var root = new DockPanel { Margin = new Thickness(16) };
         var top = new DockPanel { Margin = new Thickness(0, 0, 0, 10) }; DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(actions, Dock.Right); top.Children.Add(actions);
+        rooms = new StageRoomPanel(buddy, this, () => busy, Enter);
+        var fold = StageParts.Tool("☰", "채팅방 목록 접기 / 펼치기", () => rooms.Open = !rooms.Open); fold.Margin = new Thickness(0, 0, 8, 0); fold.FontSize = 14; DockPanel.SetDock(fold, Dock.Left); top.Children.Add(fold);
         void Tool(string text, string tip, Action action) => actions.Children.Add(StageParts.Tool(text, tip, action));
-        Tool("채팅방", "방 만들기 · 작가 노트 · 기억 요약", () => { if (busy || !Ready) return; new StageRoomWindow(buddy, Page, A.Name + " ♡ " + B.Name) { Owner = this, ShowInTaskbar = false }.ShowDialog(); Enter(); });
         Tool("대화 기록", "둘이 나눈 장면을 다시 보고, 고치고, 모아 두고, 정리해요", () => { if (busy || !Ready) return; new StageHistoryWindow(buddy, Thread) { Owner = this, ShowInTaskbar = false }.ShowDialog(); Enter(); });
         Tool("페이지 설정", "스탠딩 그림 · 배경 · 프롬프트와 길이", () => { new StageSettingsWindow(buddy, A) { Owner = this, ShowInTaskbar = false }.ShowDialog(); view.Forget(); Enter(); });
         var heart = new TextBlock { Text = "♡", Foreground = Pastel.Hot, FontSize = 18, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) };
-        foreach (var part in new UIElement[] { first, heart, second, rooms }) { if (part is ComboBox box) box.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(part, Dock.Left); top.Children.Add(part); }
+        foreach (var part in new UIElement[] { first, heart, second }) { if (part is ComboBox box) box.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(part, Dock.Left); top.Children.Add(part); }
         top.Children.Add(new Border());   // the space between the two sides
 
         var bottom = new StackPanel { Margin = new Thickness(0, 10, 0, 0) }; DockPanel.SetDock(bottom, Dock.Bottom); root.Children.Add(bottom);
@@ -53,9 +54,9 @@ public sealed class PairStageWindow : Window
         var people = buddy.StageCharacters().Select(c => new Choice(c, c.Role + " · " + c.Title)).ToArray();
         filling = true; first.ItemsSource = people; second.ItemsSource = people; first.SelectedIndex = 0; second.SelectedIndex = people.Length > 1 ? 1 : 0; filling = false;
         first.SelectionChanged += (_, _) => { if (!filling) Enter(); }; second.SelectionChanged += (_, _) => { if (!filling) Enter(); };
-        rooms.SelectionChanged += (_, _) => { if (!filling && Ready && rooms.SelectedItem is StageRoom room) { buddy.Rooms.Select(Page, room); Enter(); } };
         buddy.Adventure.Changed += Closeness; Closed += (_, _) => { buddy.Adventure.Changed -= Closeness; request?.Cancel(); };
-        Pastel.Window(this, "둘만의 페이지", root, 940, 840); MinWidth = 820; MinHeight = 560;
+        var shell = new DockPanel(); DockPanel.SetDock(rooms, Dock.Left); shell.Children.Add(rooms); shell.Children.Add(root);
+        Pastel.Window(this, "둘만의 페이지", shell, 1140, 840); MinWidth = 900; MinHeight = 560;
         view.SetFont(FontAssets.Get(buddy.Pref.StageFontPath), buddy.Pref.StageFontSize); Activated += (_, _) => view.SetFont(FontAssets.Get(buddy.Pref.StageFontPath), buddy.Pref.StageFontSize);
         Enter(); Loaded += (_, _) => input.Focus();
     }
@@ -73,9 +74,9 @@ public sealed class PairStageWindow : Window
     void Enter()
     {
         if (first.SelectedItem == null || second.SelectedItem == null) return;
-        if (!Ready) { rooms.ItemsSource = null; lines.Clear(); view.Show(buddy.Stage.State.Backdrop, ""); view.EmptyNote = buddy.StageCharacters().Count < 2 ? "둘만의 페이지에는 캐릭터가 두 명 필요해요.\n캐릭터 프리셋을 하나 더 만들어 주세요." : "서로 다른 두 캐릭터를 골라 주세요."; view.Present("", "……", false); go.IsEnabled = false; return; }
-        filling = true; var all = buddy.Rooms.Rooms(Page).ToArray(); var open = buddy.Rooms.Current(Page); rooms.ItemsSource = all; rooms.SelectedItem = open; filling = false;
-        go.IsEnabled = !busy; Title = A.Name + " ♡ " + B.Name + (all.Length > 1 ? " · " + open.Name : ""); Closeness();
+        if (!Ready) { rooms.Load("", ""); lines.Clear(); view.Show(buddy.Stage.State.Backdrop, ""); view.EmptyNote = buddy.StageCharacters().Count < 2 ? "둘만의 페이지에는 캐릭터가 두 명 필요해요.\n캐릭터 프리셋을 하나 더 만들어 주세요." : "서로 다른 두 캐릭터를 골라 주세요."; view.Present("", "……", false); go.IsEnabled = false; return; }
+        rooms.Load(Page, A.Name + " ♡ " + B.Name);
+        go.IsEnabled = !busy; Title = A.Name + " ♡ " + B.Name + (buddy.Rooms.Rooms(Page).Count > 1 ? " · " + buddy.Rooms.Current(Page).Name : ""); Closeness();
         string chosen = (kind.SelectedItem as Kind)?.Key ?? PairStageTalk.Continue;
         var kinds = new[] { new Kind(PairStageTalk.Continue, "둘이 알아서"), new Kind(PairStageTalk.Situation, "상황 제시"), new Kind(PairStageTalk.AsFirst, A.Name + "(으)로서"), new Kind(PairStageTalk.AsSecond, B.Name + "(으)로서") };
         kind.ItemsSource = kinds; kind.SelectedItem = kinds.FirstOrDefault(k => k.Key == chosen) ?? kinds[0]; Hint();
@@ -113,7 +114,7 @@ public sealed class PairStageWindow : Window
     {
         if (busy || !Ready) return; var a = A; var b = B; string choice = (kind.SelectedItem as Kind)?.Key ?? PairStageTalk.Continue, text = input.Text.Trim();
         if (choice != PairStageTalk.Continue && text.Length == 0) choice = PairStageTalk.Continue;
-        busy = true; go.IsEnabled = false; stop.IsEnabled = true; first.IsEnabled = second.IsEnabled = rooms.IsEnabled = kind.IsEnabled = input.IsEnabled = false; request = new CancellationTokenSource();
+        busy = true; go.IsEnabled = false; stop.IsEnabled = true; first.IsEnabled = second.IsEnabled = kind.IsEnabled = input.IsEnabled = false; request = new CancellationTokenSource();
         status.Text = choice == PairStageTalk.Situation ? "상황: " + SafeFiles.OneLine(text, 100) : choice == PairStageTalk.Continue ? "두 사람이 이야기하는 중…" : (choice == PairStageTalk.AsFirst ? a.Name : b.Name) + ": " + SafeFiles.OneLine(text, 100);
         view.Continues = view.Earlier = false; view.Present(lines.Count > 0 ? (lines[^1].Second ? b.Name : a.Name) : a.Name, "…", false);
         try
@@ -126,7 +127,7 @@ public sealed class PairStageWindow : Window
         catch (Exception e) { status.Text = "장면을 받지 못했어요. " + e.Message; Restore(); }
         finally
         {
-            request?.Dispose(); request = null; busy = false; go.IsEnabled = Ready; stop.IsEnabled = false; first.IsEnabled = second.IsEnabled = rooms.IsEnabled = kind.IsEnabled = input.IsEnabled = true;
+            request?.Dispose(); request = null; busy = false; go.IsEnabled = Ready; stop.IsEnabled = false; first.IsEnabled = second.IsEnabled = kind.IsEnabled = input.IsEnabled = true;
             if (IsVisible) input.Focus();
         }
     }

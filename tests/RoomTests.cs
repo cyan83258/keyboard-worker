@@ -67,6 +67,9 @@ public static class RoomTests
         bool full = false; try { for (int i = 0; i < StageRooms.MaxRooms + 1; i++) again.Add("many", "방 " + i); } catch (InvalidOperationException) { full = true; }
         Check(full && again.Rooms("many").Count == StageRooms.MaxRooms, "There is a limit to the rooms of a page");
 
+        var noon = new DateTime(2026, 5, 10, 12, 0, 0);
+        Check(StageRoomPanel.When(new DateTimeOffset(noon.AddHours(-3)), noon) == "오늘 09:00" && StageRoomPanel.When(new DateTimeOffset(noon.AddDays(-1)), noon) == "어제" && StageRoomPanel.When(new DateTimeOffset(noon.AddDays(-20)), noon) == "4월 20일" && StageRoomPanel.When(new DateTimeOffset(noon.AddYears(-1)), noon) == "2025. 5. 10.", "A room says when it was last talked in");
+
         // ---- memory ----
         var day = new DateTimeOffset(2026, 5, 1, 9, 0, 0, TimeSpan.Zero); var room = new StageRoom();
         var turns = Enumerable.Range(0, 12).Select(i => new ChatTurn("말 " + i, "답 " + i, day.AddMinutes(i), "루카", "g")).ToArray();
