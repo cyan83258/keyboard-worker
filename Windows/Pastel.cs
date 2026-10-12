@@ -546,11 +546,17 @@ public static class Pastel
         };
         // A long text in small print is an explanation: it is folded into a "?" that shows it on hover, so windows stay calm.
         // Labels, headings and texts that are filled in later (status lines, counts) are short or empty here and stay as they are.
-        if (!ShowNotes && size <= 14 && text.Length >= NoteLength) { block.Text = ""; block.Inlines.Add(new System.Windows.Documents.InlineUIContainer(Help(text))); block.Margin = new Thickness(0, 1, 0, 5); }
+        if (!ShowNotes && size <= 14 && text.Length >= NoteLength)
+        {
+            block.Text = ""; if (HideHelp) { block.Visibility = Visibility.Collapsed; return block; }
+            block.Inlines.Add(new System.Windows.Documents.InlineUIContainer(Help(text))); block.Margin = new Thickness(0, 1, 0, 5);
+        }
         return block;
     }
     // Explanations are written out in full instead of folded (a setting; applies to windows opened afterwards).
     public static bool ShowNotes { get; set; }
+    // The "?" marks are not shown at all and take no room (a setting; applies to windows opened afterwards).
+    public static bool HideHelp { get; set; }
     public const int NoteLength = 40;
     // The small translucent "?" that shows an explanation while the mouse is on it.
     public static FrameworkElement Help(string text)
@@ -567,6 +573,7 @@ public static class Pastel
         };
         ToolTipService.SetInitialShowDelay(badge, 120); ToolTipService.SetShowDuration(badge, 60000); ToolTipService.SetBetweenShowDelay(badge, 0);
         badge.MouseEnter += (_, _) => badge.Opacity = .9; badge.MouseLeave += (_, _) => badge.Opacity = .38;
+        if (HideHelp) badge.Visibility = Visibility.Collapsed;
         return badge;
     }
 

@@ -12,9 +12,8 @@ namespace KeyboardWorker;
 public sealed record QuickToggle(string Key, string Group, string Title, Func<Buddy, bool> Get, Action<Preferences, bool>? Set, Action<Buddy, bool>? Special = null, Action<Buddy>? More = null);
 public static class QuickToggles
 {
-    // Everything the pets say first is in the three "먼저 말하기" groups: the two switches over all of it, what AI makes, what the user wrote.
-    public const string Shown = "화면에 보이는 것", Sound = "소리", Speak = "먼저 말하기", SpeakAi = "먼저 말하기 · AI가 만드는 대사", SpeakOwn = "먼저 말하기 · 내가 쓴 대사", Motion = "움직임과 동작";
-    public static readonly string[] Speaking = { Speak, SpeakAi, SpeakOwn };
+    // What the pets say first: each kind of line is made by AI when its box is checked, and comes from the line book when it is not.
+    public const string Shown = "화면에 보이는 것", Sound = "소리", SpeakAi = "AI가 만드는 대사 (체크 안 하면 대사집의 대사)", SpeakOwn = "대사집의 대사", Motion = "움직임과 동작";
     static void Game(Buddy buddy, Action<GameState> change) { var options = buddy.Game.State.Snapshot(); change(options); buddy.Game.Options(options); }
     static void Auto(Buddy buddy, Func<AutomaticOptions, AutomaticOptions> change) { var chat = buddy.Chat.Preferences.Snapshot(); chat.Automatic = change(chat.Automatic); buddy.Chat.Apply(chat); }
     public static readonly QuickToggle[] All =
@@ -29,19 +28,17 @@ public static class QuickToggles
         new("notes", Shown, "설명 글 펼쳐 보기 (? 대신 글로)", b => b.Pref.ShowNotes, (p, v) => p.ShowNotes = v),
         new("typing", Sound, "타이핑 소리", b => b.Pref.Sound, (p, v) => p.Sound = v),
         new("voice", Sound, "캐릭터 음성", b => b.Pref.Voice.Enabled, (p, v) => p.Voice = p.Voice with { Enabled = v }),
-        // The two switches over everything the pets say first. Off, the choices under them keep their marks but do nothing.
-        new("speaking", Speak, "캐릭터가 먼저 말하기 (전체)", b => b.Pref.Speaking, (p, v) => p.Speaking = v),
-        new("ai-speaking", Speak, "AI로 대사 만들기 (전체)", b => b.Pref.AiSpeaking == true, (p, v) => p.AiSpeaking = v),
-        new("ai-nudge", SpeakAi, "AI 재촉", b => b.Chat.Preferences.Automatic.AiNudge, null, (b, v) => Auto(b, a => a with { AiNudge = v }), b => b.OpenAutomatic()),
-        new("ai-random", SpeakAi, "AI 랜덤 한마디", b => b.Chat.Preferences.Automatic.RandomLines, null, (b, v) => Auto(b, a => a with { RandomLines = v }), b => b.OpenAutomatic()),
-        new("duo-talk", SpeakAi, "두 친구의 AI 대화", b => b.Pref.Duo.Interactions, (p, v) => p.Duo = p.Duo with { Interactions = v }, null, b => b.OpenDuo(1)),
-        new("remarks-ai", SpeakAi, "프로그램 보고 한마디를 AI로", b => b.Pref.Awareness.CommentsUseAi, (p, v) => p.Awareness = p.Awareness with { CommentsUseAi = v }, null, b => b.OpenAwareness(null)),
+        new("help", Shown, "도움말 물음표(?) 표시", b => !b.Pref.HideHelp, (p, v) => p.HideHelp = !v),
+        new("ai-nudge", SpeakAi, "재촉", b => b.Chat.Preferences.Automatic.AiNudge, null, (b, v) => Auto(b, a => a with { AiNudge = v }), b => b.OpenAutomatic()),
+        new("ai-random", SpeakAi, "랜덤 한마디", b => b.Chat.Preferences.Automatic.RandomLines, null, (b, v) => Auto(b, a => a with { RandomLines = v }), b => b.OpenAutomatic()),
+        new("duo-talk", SpeakAi, "두 친구의 대화", b => b.Pref.Duo.Interactions, (p, v) => p.Duo = p.Duo with { Interactions = v }, null, b => b.OpenDuo(1)),
+        new("remarks-ai", SpeakAi, "프로그램 보고 한마디", b => b.Pref.Awareness.CommentsUseAi, (p, v) => p.Awareness = p.Awareness with { CommentsUseAi = v }, null, b => b.OpenAwareness(null)),
         new("music-talk", SpeakAi, "듣는 노래 이야기", b => b.Pref.Music.AiConversation, (p, v) => p.Music = p.Music with { AiConversation = v }, null, b => b.OpenMusicSettings()),
-        new("quests", SpeakAi, "이야기 퀘스트 자동 생성", b => b.Adventure.State.Options.Enabled, null, (b, v) => b.Adventure.SetOptions(b.Adventure.State.Options with { Enabled = v }), b => b.OpenAdventure(4)),
-        new("local", SpeakOwn, "랜덤 한마디", b => b.Pref.LocalRandom, (p, v) => p.LocalRandom = v, null, b => b.OpenLineBook()),
-        new("greetings", SpeakOwn, "시간대 인사", b => b.Pref.Greetings, (p, v) => p.Greetings = v, null, b => b.OpenLineBook()),
-        new("remarks", SpeakOwn, "프로그램 보고 한마디", b => b.Pref.Awareness.Comments, (p, v) => p.Awareness = p.Awareness with { Comments = v }, null, b => b.OpenAwareness(null)),
-        new("nudge-own", SpeakOwn, "AI가 실패하면 내 재촉 대사로", b => b.Chat.Preferences.Automatic.FallbackNudge, null, (b, v) => Auto(b, a => a with { FallbackNudge = v }), b => b.OpenLineBook()),
+        new("quests", SpeakAi, "이야기 퀘스트 (AI만 가능)", b => b.Adventure.State.Options.Enabled, null, (b, v) => b.Adventure.SetOptions(b.Adventure.State.Options with { Enabled = v }), b => b.OpenAdventure(4)),
+        // Whether the written lines of a kind are said at all.
+        new("local", SpeakOwn, "랜덤 한마디 말하기", b => b.Pref.LocalRandom, (p, v) => p.LocalRandom = v, null, b => b.OpenLineBook()),
+        new("greetings", SpeakOwn, "시간대 인사 말하기", b => b.Pref.Greetings, (p, v) => p.Greetings = v, null, b => b.OpenLineBook()),
+        new("remarks", SpeakOwn, "프로그램 보고 한마디 하기", b => b.Pref.Awareness.Comments, (p, v) => p.Awareness = p.Awareness with { Comments = v }, null, b => b.OpenAwareness(null)),
         new("bounce", Motion, "타이핑할 때 몸 흔들기", b => b.Pref.Desktop.TypingBounce, (p, v) => p.Desktop.TypingBounce = v),
         new("hearts", Motion, "쓰다듬기 하트", b => b.Pref.PettingHearts, (p, v) => p.PettingHearts = v),
         new("through", Motion, "마우스 클릭 통과", b => b.Pref.ClickThrough, (p, v) => p.ClickThrough = v),
@@ -49,8 +46,7 @@ public static class QuickToggles
         new("fullscreen", Motion, "전체 화면에서 숨기기", b => b.Pref.HideFullscreen, (p, v) => p.HideFullscreen = v),
         new("game-light", Motion, "게임 중 가볍게", b => b.Pref.Awareness.GameLight, (p, v) => p.Awareness = p.Awareness with { GameLight = v })
     };
-    // Whether a choice does anything just now: those under a switch that is off do not.
-    public static bool Live(Buddy buddy, QuickToggle toggle) => toggle.Group == SpeakAi ? buddy.Pref.AiOn : toggle.Group != SpeakOwn || buddy.Pref.Speaking;    public static QuickToggle? Find(string key) => All.FirstOrDefault(t => t.Key == key);
+    public static QuickToggle? Find(string key) => All.FirstOrDefault(t => t.Key == key);
     public static Dictionary<string, bool> Capture(Buddy buddy) => All.ToDictionary(t => t.Key, t => t.Get(buddy));
     // Sets the given choices; keys a profile does not mention stay as they are.
     public static void Apply(Buddy buddy, IReadOnlyDictionary<string, bool> values)

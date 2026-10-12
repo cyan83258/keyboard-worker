@@ -106,16 +106,22 @@ public static class RoomTests
         Check(ShopGear.Items.Count == 0 && !gone.State.Equipped.ContainsKey("head") && !gone.State.Owned.Contains("shop-head_고양이 귀_300"), "Without the folder there are none, and what is no longer sold leaves the wardrobe");
         Check(ShopGear.Describe(new CustomGear { Name = "고양이 귀", Slot = "head", WidthPercent = 42, OffsetY = -6 }, "head_고양이 귀_300.png") is { } copied && copied.Contains("\"file\":\"head_고양이 귀_300.png\"") && copied.Contains("\"width\":42") && copied.Contains("\"y\":-6") && copied.Contains("\"behind\":false"), "A placement worked out in the program is written as a line of the list");
 
-        // ---- speaking first: two switches over everything ----
-        var speech = new Preferences();
-        Check(speech.Speaking && speech.AiSpeaking == null && !speech.AiOn, "New settings speak first, with AI lines undecided (so off)");
-        QuickToggles.Find("ai-speaking")!.Set!(speech, true); bool both = speech.AiOn; QuickToggles.Find("speaking")!.Set!(speech, false);
-        Check(both && !speech.Speaking && speech.AiSpeaking == true && !speech.AiOn && speech.Snapshot().AiSpeaking == true && System.Text.Json.JsonSerializer.Deserialize<Preferences>(System.Text.Json.JsonSerializer.Serialize(speech))!.AiSpeaking == true, "AI lines need both switches; the choice is kept");
-        var spoken = QuickToggles.All.Where(t => QuickToggles.Speaking.Contains(t.Group)).ToArray();
-        Check(spoken.Count(t => t.Group == QuickToggles.Speak) == 2 && spoken.Count(t => t.Group == QuickToggles.SpeakAi) == 6 && spoken.Count(t => t.Group == QuickToggles.SpeakOwn) == 4 && new[] { "ai-nudge", "ai-random", "duo-talk", "remarks-ai", "music-talk", "quests", "local", "greetings", "remarks" }.All(k => spoken.Any(t => t.Key == k)), "Everything the pets say first is switched in one place");
-        var probeSettings = new Preferences(); QuickToggles.Find("remarks-ai")!.Set!(probeSettings, false); QuickToggles.Find("music-talk")!.Set!(probeSettings, false);
-        Check(!probeSettings.Awareness.CommentsUseAi && !probeSettings.Music.AiConversation && probeSettings.Awareness.Comments, "The AI's remarks and its talk of songs have switches of their own");
-
+        // ---- speaking first: each kind of line is the AI's when checked, the line book's when not ----
+        var kinds = QuickToggles.All.Where(t => t.Group == QuickToggles.SpeakAi).Select(t => t.Key).ToArray();
+        Check(kinds.SequenceEqual(new[] { "ai-nudge", "ai-random", "duo-talk", "remarks-ai", "music-talk", "quests" }) && QuickToggles.All.Count(t => t.Group == QuickToggles.SpeakOwn) == 3 && QuickToggles.Find("speaking") == null, "Six kinds of lines can be handed to the AI, each on its own");
+        var fresh = new Preferences();
+        Check(!fresh.Awareness.CommentsUseAi && !fresh.Music.AiConversation && !fresh.Duo.Interactions && fresh.Awareness.Comments && !fresh.AiChoicesSet, "Nothing is made by AI until the user checks it");
+        QuickToggles.Find("remarks-ai")!.Set!(fresh, true); QuickToggles.Find("music-talk")!.Set!(fresh, true);
+        Check(fresh.Awareness.CommentsUseAi && fresh.Music.AiConversation, "Remarks about programs and talk of songs have switches of their own");
+        // ---- help marks can be taken away ----
+        bool hidden = Pastel.HideHelp; string longNote = new string('가', Pastel.NoteLength + 5);
+        try
+        {
+            Pastel.HideHelp = false; var marked = Pastel.Text(longNote, 12); Pastel.HideHelp = true; var gone2 = Pastel.Text(longNote, 12); var shortOne = Pastel.Text("짧은 글", 12);
+            Check(marked.Visibility == System.Windows.Visibility.Visible && marked.Inlines.Count == 1 && gone2.Visibility == System.Windows.Visibility.Collapsed && shortOne.Visibility == System.Windows.Visibility.Visible && shortOne.Text == "짧은 글" && Pastel.Help("설명").Visibility == System.Windows.Visibility.Collapsed, "With help marks off an explanation takes no room; labels stay");
+            var helpPrefs = new Preferences(); QuickToggles.Find("help")!.Set!(helpPrefs, false); Check(helpPrefs.HideHelp && !new Preferences().HideHelp, "The marks are switched with the other choices, and shown unless switched off");
+        }
+        finally { Pastel.HideHelp = hidden; }
         // ---- back to how it was first installed ----
         string resetHome = Path.Combine(home, "reset"); Directory.CreateDirectory(Path.Combine(resetHome, "images")); File.WriteAllText(Path.Combine(resetHome, "settings.json"), "{}"); File.WriteAllText(Path.Combine(resetHome, "images", "a.png"), "x");
         Check(FactoryReset.ApplyPending(resetHome) == null && File.Exists(Path.Combine(resetHome, "settings.json")), "Nothing is erased unless a reset was staged");

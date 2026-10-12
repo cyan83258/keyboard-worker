@@ -12,7 +12,7 @@ public sealed record MusicOptions
     public bool PlayerVisible { get; init; } = true;
     public bool Sprites { get; init; } = true;
     public bool AllowBrowserMedia { get; init; } = true;
-    public bool AiConversation { get; init; } = true;
+    public bool AiConversation { get; init; }
     public bool Locked { get; init; }
     public bool Compact { get; init; }
     public bool FollowHead { get; init; } = true;

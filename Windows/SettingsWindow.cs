@@ -102,7 +102,7 @@ public sealed class SettingsWindow : Window
             DockPanel.SetDock(arrow, Dock.Right);
             heading.Children.Add(arrow);
             // What the tile opens is told by its "?"; written out only when explanations are set to show.
-            if (!Pastel.ShowNotes) { var what = Pastel.Help(help); what.Margin = new Thickness(6, 0, 0, 0); what.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(what, Dock.Right); heading.Children.Add(what); }
+            if (!Pastel.ShowNotes && !Pastel.HideHelp) { var what = Pastel.Help(help); what.Margin = new Thickness(6, 0, 0, 0); what.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(what, Dock.Right); heading.Children.Add(what); }
             heading.Children.Add(new TextBlock { Text = title, Foreground = Pastel.Ink, FontWeight = FontWeights.Bold, FontSize = 14, TextTrimming = TextTrimming.CharacterEllipsis });
             var body = new StackPanel();
             body.Children.Add(heading);
@@ -149,7 +149,7 @@ public sealed class SettingsWindow : Window
 
         var talk = Page("말 걸기·AI", "캐릭터가 언제 어떻게 먼저 말할지, AI를 어디에 연결할지 정해요.");
         add = Section(talk, "먼저 말하기");
-        add("먼저 말하기 · 한꺼번에 켜고 끄기", "캐릭터가 먼저 건네는 말 전부: 전체 스위치 · AI 대사 · 내가 쓴 대사 · 종류별 세부 설정", buddy.OpenSpeech);
+        add("먼저 말하기 · AI로 만들 대사 고르기", "재촉 · 랜덤 한마디 · 두 친구의 대화 · 프로그램 한마디 · 노래 이야기 · 퀘스트를 AI가 만들지, 대사집에서 낼지", buddy.OpenSpeech);
         add("재촉 시작 시간", "입력이 멈춘 뒤 재촉까지의 시간과 반복 간격 · 말풍선 숨김 시간", () => Category("재촉", reminderPanel));
         add("AI 대사 간격 · 프롬프트", "AI 재촉과 랜덤 한마디의 간격 · 호출 제한 · 프롬프트 다섯 가지", buddy.OpenAutomatic);
         add("주변 알아보기", "지금 쓰는 프로그램 · 보는 영상과 노래 · 시간대를 캐릭터가 알게 하기", () => buddy.OpenAwareness(this));

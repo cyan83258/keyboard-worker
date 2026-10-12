@@ -9,7 +9,7 @@ namespace KeyboardWorker;
 // Everything the pets say on their own: greetings, nudges, random lines, remarks about what the user is doing, the two pets
 // talking to each other, and anniversaries. Each has an AI form (when AI lines are on and a request is allowed) and a form
 // that uses the lines the user wrote (see LineBook). The program has no lines of its own: with nothing written and no AI
-// the pets say nothing. Two switches stand over everything here: Pref.Speaking (speak first at all) and Pref.AiOn (by AI).
+// the pets say nothing. Each kind of line has one switch: on, the AI makes it; off, the line the user wrote is said.
 // Buddy calls Step once a second; everything shown goes back through Buddy (bubbles, poses, voice).
 public sealed class AutoLines
 {
@@ -53,10 +53,7 @@ public sealed class AutoLines
         var budget = Chat.Preferences.Budget; if (!budget.Enabled || !budget.Pace) return true;
         return AiUsage.Current.Snapshot().AutomaticCalls < AiUsage.Allowance(budget, DateTime.Now);
     }
-    // The schedules as they stand with the switches: with AI lines off nothing of the AI's is due, with speaking off nothing at all.
-    AutomaticOptions AiSchedule => Pref.AiOn ? Chat.Preferences.Automatic : Chat.Preferences.Automatic with { AiNudge = false, RandomLines = false };
-    AutomaticOptions PairSchedule => Pref.AiOn ? Pref.Duo.Schedule : Pref.Duo.Schedule with { RandomLines = false };
-    AutomaticOptions LocalSchedule => new() { RandomLines = Pref.LocalRandom && Pref.Speaking, RandomMinMinutes = Pref.LocalRandomMinMinutes, RandomMaxMinutes = Pref.LocalRandomMaxMinutes, CooldownSeconds = 60, HourlyLimit = 60 };
+    AutomaticOptions LocalSchedule => new() { RandomLines = Pref.LocalRandom, RandomMinMinutes = Pref.LocalRandomMinMinutes, RandomMaxMinutes = Pref.LocalRandomMaxMinutes, CooldownSeconds = 60, HourlyLimit = 60 };
 
     // With two pets out (and sharing on) either of them says the next line; null means the main pet.
     CompanionWindow? NextSpeaker()
@@ -98,19 +95,23 @@ public sealed class AutoLines
     // talking, a random line, and the nudge after a long pause. At most one starts per tick, and none while a bubble is showing.
     public void Step(long now)
     {
-        // Decided once, for settings from before there was a switch: AI lines stay on for whoever was using them.
-        if (Pref.AiSpeaking == null) { var before = Chat.Preferences.Automatic; Pref.AiSpeaking = before.AiNudge || before.RandomLines || Pref.Duo.Interactions; Storage.Save(Pref); }
-        bool eligible = Eligible(true); var automatic = AiSchedule; var pairSchedule = PairSchedule; var partner = Partner;
+        // Once, for settings from before remarks and talk of songs had switches of their own: they used to follow the AI
+        // nudge / random line, so whoever had those off does not suddenly get AI requests.
+        if (!Pref.AiChoicesSet)
+        {
+            var before = Chat.Preferences.Automatic; Pref.AiChoicesSet = true;
+            if (!before.AiNudge && !before.RandomLines) { Pref.Awareness = Pref.Awareness with { CommentsUseAi = false }; Pref.Music = Pref.Music with { AiConversation = false }; }
+            Storage.Save(Pref);
+        }
+        bool eligible = Eligible(true); var automatic = Chat.Preferences.Automatic; var pairSchedule = Pref.Duo.Schedule; var partner = Partner;
         aiClock.Observe(automatic, now, eligible);
-        duoClock.Observe(pairSchedule, now, eligible && partner != null && Pref.Duo.Enabled && Pref.AiOn);
+        duoClock.Observe(pairSchedule, now, eligible && partner != null && Pref.Duo.Enabled);
         localClock.Observe(LocalSchedule, now, eligible);
         if (playing) return;   // the two pets are in the middle of an exchange
         if (!eligible) { Cancel(); return; }
         if (pet.MainBubble.IsVisible) { Cancel(); return; }
         if (busy || partner?.BubbleVisible == true) return;
         if (Anniversary()) return;
-        // Not speaking first: the pose still shows that a while has passed, but nothing is said.
-        if (!Pref.Speaking) { if (pet.Idle.TryNudge(now, Pref)) pet.ShowPose("nudge"); return; }
         if (Greeting(now)) return;
         if (StoryStepDue(automatic, now)) { aiClock.Reserve(true, automatic with { AiNudge = true }, now); _ = pet.GenerateAdventure(false); return; }
         if (Topic(now) is { } topic) { _ = SpeakTopic(topic.Instruction, topic.Local, topic.Mood, topic.Ai, topic.Situation); return; }
@@ -127,7 +128,7 @@ public sealed class AutoLines
     // A new quest is wanted, or a finished quest is waiting for its story, and the story feature may ask the AI now.
     bool StoryStepDue(AutomaticOptions automatic, long now)
     {
-        var book = pet.Adventure.State; if (!Pref.AiOn || !book.Options.Enabled || DateTimeOffset.Now - book.LastAi < TimeSpan.FromMinutes(book.Options.MinAiMinutes)) return false;
+        var book = pet.Adventure.State; if (!book.Options.Enabled || DateTimeOffset.Now - book.LastAi < TimeSpan.FromMinutes(book.Options.MinAiMinutes)) return false;
         if (!aiClock.CanReserve(automatic, now) || !BudgetOpen()) return false;
         return book.Quests.Any(q => q.Ready && q.StoryId.Length == 0) || !book.Quests.Any(q => q.StoryId.Length == 0);
     }
@@ -139,7 +140,7 @@ public sealed class AutoLines
         var events = Anniversaries.Today(book.Anniversaries, DateTime.Now); book.AnniversaryDay = day; pet.Adventure.Touch();
         if (events.Length == 0) return false;
         string title = string.Join(" · ", events); pet.CelebrateWith("오늘은 기념일", title, "함께 축하해요 ♡", "기념일 보기", pet.OpenAnniversaries);
-        var speaker = NextSpeaker(); if (Pref.Speaking && Written(speaker, "anniversary", ("event", events[0])) is string line) Speak(speaker, line, "happy", false, "celebrate");
+        var speaker = NextSpeaker(); if (Written(speaker, "anniversary", ("event", events[0])) is string line) Speak(speaker, line, "happy", false, "celebrate");
         pet.RecordPair("기념일", title, ""); pet.OfferScene("celebrate"); return true;
     }
     // The first meeting in each part of the day, while the user is at the keyboard.
@@ -164,7 +165,7 @@ public sealed class AutoLines
     public bool Say(string situation, bool? second, string mood, params (string Key, string Value)[] values)
     {
         var speaker = second == null ? NextSpeaker() : second == true ? Partner : null; if (second == true && speaker == null) return false;
-        if (!Pref.Speaking || !pet.MayShow || Written(speaker, situation, values) is not string line) return false;
+        if (!pet.MayShow || Written(speaker, situation, values) is not string line) return false;
         Speak(speaker, line, mood, false, situation == "anniversary" || situation == "stage-up" ? "celebrate" : "speak"); return true;
     }
 
@@ -196,7 +197,7 @@ public sealed class AutoLines
     {
         long now = Environment.TickCount64; var automatic = Chat.Preferences.Automatic; var speaker = NextSpeaker();
         void Fallback() { if (local(speaker) is string line) Speak(speaker, line, mood, false, situation); }
-        if (!useAi || !Pref.AiOn || !BudgetOpen() || !aiClock.Reserve(true, automatic with { AiNudge = true }, now)) { Fallback(); return; }
+        if (!useAi || !BudgetOpen() || !aiClock.Reserve(true, automatic with { AiNudge = true }, now)) { Fallback(); return; }
         var source = Begin("상황에 맞는 한마디 생성 중…"); var preferences = Chat.Preferences;
         try
         {
@@ -288,19 +289,18 @@ public sealed class AutoLines
     {
         get
         {
-            long now = Environment.TickCount64; var automatic = AiSchedule;
+            long now = Environment.TickCount64; var automatic = Chat.Preferences.Automatic;
             if (pet.RestReason is string resting) return resting;
-            if (!Pref.Speaking) return "'먼저 말하기'가 꺼져 있어요. 캐릭터는 말을 걸면 대답만 해요.";
             if (busy) return playing ? "두 친구가 이야기하는 중이에요…" : "지금 대사를 만드는 중이에요…";
             string local = Pref.LocalRandom ? "직접 쓴 한마디: " + localClock.Outlook(LocalSchedule, now) : "직접 쓴 한마디는 꺼져 있어요";
-            if (!Pref.AiOn) return "AI가 만드는 대사는 꺼져 있어요. " + local;
+            if (!automatic.AiNudge && !automatic.RandomLines && !Pref.Duo.Interactions) return "재촉·랜덤 한마디·두 친구의 대화는 대사집의 대사로 나와요. " + local;
             if (!BudgetOpen())
             {
                 var budget = Chat.Preferences.Budget;
                 return $"오늘 자동 요청을 하루에 고르게 나눠 쓰는 중이라 잠시 쉬어요 (오늘 {AiUsage.Current.Snapshot().AutomaticCalls}회 사용 · 지금까지 허용 {AiUsage.Allowance(budget, DateTime.Now)}회 · 하루 {budget.AutomaticCalls}회). 그동안은 직접 쓴 대사가 나와요. " + local;
             }
             string text = automatic.RandomLines ? "다음 AI 한마디: " + aiClock.Outlook(automatic, now) : "AI 랜덤 한마디는 꺼져 있어요";
-            if (Partner != null && Pref.Duo.Enabled) text += Pref.Duo.Interactions ? " · 다음 상호작용: " + duoClock.Outlook(PairSchedule, now) : " · 상호작용은 꺼져 있어요";
+            if (Partner != null && Pref.Duo.Enabled) text += Pref.Duo.Interactions ? " · 다음 상호작용: " + duoClock.Outlook(Pref.Duo.Schedule, now) : " · 상호작용은 꺼져 있어요";
             return text + " · " + local;
         }
     }

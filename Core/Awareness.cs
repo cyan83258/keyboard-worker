@@ -18,7 +18,7 @@ public sealed record AwarenessOptions
     public bool GameLight { get; init; } = true;     // run lighter while a game or full-screen program is in front
     public bool GameHide { get; init; }              // hide the pets entirely while a game is in front
     public bool Clock { get; init; } = true;         // tell the AI the time of day and the weekday
-    public bool CommentsUseAi { get; init; } = true; // off: remarks about programs use the lines the user wrote only (no AI request)
+    public bool CommentsUseAi { get; init; }         // remarks about programs are made by AI; off: the lines the user wrote (set with the other kinds of lines, in "먼저 말하기")
     public AwarenessOptions Normalize() => this with { CommentMinutes = Math.Clamp(CommentMinutes, 5, 720), Games = (Games ?? "")[..Math.Min((Games ?? "").Length, 2000)], Work = (Work ?? "")[..Math.Min((Work ?? "").Length, 2000)] };
 }
 

@@ -49,11 +49,10 @@ public sealed class Preferences
     public Dictionary<string, string> LineBook { get; set; } = new();
     public Dictionary<string, string> VoicePaths { get; set; } = new();
     public VoiceOptions Voice { get; set; } = new();
-    // The pets speak first at all (greetings, nudges, random lines, remarks, the two talking). Off: they only answer.
-    public bool Speaking { get; set; } = true;
-    // Lines the pets say first may be made by AI. Null until first decided: on for those who already used AI lines, else off.
-    public bool? AiSpeaking { get; set; }
-    [System.Text.Json.Serialization.JsonIgnore] public bool AiOn => Speaking && AiSpeaking == true;
+    // Settings from before each kind of line had its own AI switch were looked over once (see AutoLines.Step).
+    public bool AiChoicesSet { get; set; }
+    // The "?" marks that hold explanations are not shown at all, and take no room.
+    public bool HideHelp { get; set; }
     public bool LocalRandom { get; set; } = true;
     public int LocalRandomMinMinutes { get; set; } = 15;
     public int LocalRandomMaxMinutes { get; set; } = 30;

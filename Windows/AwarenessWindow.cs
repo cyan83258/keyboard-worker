@@ -14,7 +14,6 @@ public sealed class AwarenessWindow : Window
         var programs = new StackPanel(); programs.Children.Add(Pastel.Text("지금 쓰는 프로그램", 16));
         var apps = new CheckBox { Content = "맨 앞에서 쓰고 있는 프로그램을 알아보고 대화에서 언급하기", IsChecked = options.Apps }; programs.Children.Add(apps);
         var comments = new CheckBox { Content = "게임이면 핀잔, 업무·창작 프로그램이면 칭찬을 먼저 건네기", IsChecked = options.Comments }; programs.Children.Add(comments);
-        var commentsAi = new CheckBox { Content = "프로그램 한마디도 AI로 만들기 (끄면 대사집에 쓴 대사만 나오고, 쓴 것이 없으면 말하지 않아요)", IsChecked = options.CommentsUseAi }; programs.Children.Add(commentsAi);
         programs.Children.Add(Pastel.Text("같은 프로그램에 다시 말하기까지 (5~720분)")); var minutes = new TextBox { Text = options.CommentMinutes.ToString() }; programs.Children.Add(minutes);
         programs.Children.Add(Pastel.Text("게임으로 볼 프로그램 이름 (쉼표로 구분 · 예: mygame.exe, launcher)")); var games = new TextBox { Text = options.Games, MaxLength = 2000 }; programs.Children.Add(games);
         programs.Children.Add(Pastel.Text("업무·창작으로 볼 프로그램 이름 (쉼표로 구분)")); var work = new TextBox { Text = options.Work, MaxLength = 2000 }; programs.Children.Add(work);
@@ -47,8 +46,7 @@ public sealed class AwarenessWindow : Window
                     Games = games.Text,
                     Work = work.Text,
                     Media = media.IsChecked == true,
-                    Clock = clock.IsChecked == true,
-                    CommentsUseAi = commentsAi.IsChecked == true
+                    Clock = clock.IsChecked == true
                 };
                 buddy.Apply(next, configureKeys: false, persist: false); await Storage.SaveAsync(buddy.Pref); Close();
             }

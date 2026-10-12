@@ -14,7 +14,7 @@ public static class DailyTests
         var sunday = new DateTime(2026, 10, 11, 23, 5, 0);
         Check(DayClock.Exact(sunday).Contains("일요일") && DayClock.Exact(sunday).Contains("23시 5분") && DayClock.Exact(sunday).Contains("밤"), "Chat is told the exact time and weekday");
         Check(DayClock.Rough(sunday).Contains("일요일 밤") && !DayClock.Rough(sunday).Contains("23"), "Prepared lines only get the part of the day");
-        Check(new AwarenessOptions().Clock && new AwarenessOptions().CommentsUseAi && !new AwarenessOptions().GameHide, "Time awareness is on and hiding during games is off by default");
+        Check(new AwarenessOptions().Clock && !new AwarenessOptions().CommentsUseAi && !new AwarenessOptions().GameHide, "Time awareness is on and hiding during games is off by default");
 
         // Time spent in a program
         var game = new AppInFront("eldenring", "", "ELDEN RING", "game"); var editor = new AppInFront("Code", "", "Visual Studio Code", "work");
