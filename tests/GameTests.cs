@@ -87,6 +87,22 @@ public static class GameTests
         Check(outfit.Wearing(TestGear.Bow)!.Flip && outfit.Places[TestGear.Bow].Flip && !ShopGear.Items.First(g => g.Id == TestGear.Bow).Flip && ShopGear.Describe(outfit.Wearing(TestGear.Bow)!, "bow_20.png").Contains("\"flip\":true") && layer.Spot("head", outfit.Wearing(TestGear.Bow)!)!.Value.Centre == moved.Centre, "An accessory can be mirrored where it sits, and the choice is kept with its place");
         var placing = new PetGame(Path.Combine(root, "game-place")); var draft = placing.State.Snapshot(); draft.Places[TestGear.Pin] = new GearPlace(50, -3, 2, 15); placing.Place(draft); OrderedStore.FlushAsync().GetAwaiter().GetResult();
         Check(new PetGame(Path.Combine(root, "game-place")).State.Places[TestGear.Pin] == new GearPlace(50, -3, 2, 15), "Places worked out by hand are saved");
+        // Two pets, two outfits: what is owned is shared, what each wears and where it sits is its own
+        var two = new PetGame(Path.Combine(root, "game-two")); two.State.Coins = 1000; two.Buy(TestGear.Bow); two.Buy(TestGear.Pin); two.Equip(TestGear.Bow); two.Equip(TestGear.Pin, true);
+        Check(two.State.For(false).Equipped["head"] == TestGear.Bow && two.State.For(true).Equipped["head"] == TestGear.Pin && two.State.Equipped["head"] == TestGear.Bow, "Each pet wears its own accessory in the same place");
+        var onSecond = two.State.For(true); onSecond.Places[TestGear.Pin] = new GearPlace(70, 5, -5, 0, true); two.Place(onSecond, true);
+        Check(two.State.For(true).Wearing(TestGear.Pin) is { WidthPercent: 70, Flip: true } && two.State.For(false).Wearing(TestGear.Pin) is { WidthPercent: 35, Flip: false } && two.State.Places.Count == 0 && two.State.Second!.Places.Count == 1, "An accessory placed on the second pet stays where it was on the main pet");
+        var tall = two.State.For(true); tall.HeadY = 30; tall.AccessoryScale = 1.5; two.Options(tall, true);
+        Check(two.State.For(true).HeadY == 30 && two.State.For(true).AccessoryScale == 1.5 && two.State.HeadY == 15 && two.State.AccessoryScale == 1, "The anchors and the scale are each pet's own");
+        two.Remove("head"); Check(!two.State.Equipped.ContainsKey("head") && two.State.For(true).Equipped["head"] == TestGear.Pin, "Taking it off one pet leaves the other dressed");
+        two.Save(true); OrderedStore.FlushAsync().GetAwaiter().GetResult(); var twoAgain = new PetGame(Path.Combine(root, "game-two"));
+        Check(twoAgain.State.For(true).Equipped["head"] == TestGear.Pin && twoAgain.State.For(true).Wearing(TestGear.Pin)!.WidthPercent == 70 && twoAgain.State.For(true).HeadY == 30 && !twoAgain.State.Equipped.ContainsKey("head"), "Both outfits are saved");
+        twoAgain.DeleteOwned(TestGear.Pin); Check(!twoAgain.State.For(true).Equipped.ContainsKey("head") && twoAgain.State.Second!.Places.Count == 0 && twoAgain.State.Owned.Contains(TestGear.Bow), "What is deleted from the wardrobe is taken off both");
+        var old = new GameState(); old.Owned.Add(TestGear.Bow); old.Equipped["head"] = TestGear.Bow; old.HeadY = 22; old.Normalize();
+        Check(old.Second is { HeadY: 22 } && old.Second.Equipped["head"] == TestGear.Bow && !ReferenceEquals(old.Second.Equipped, old.Equipped) && old.Snapshot().Second is { } copied && !ReferenceEquals(copied, old.Second), "Settings from before start the second pet in what the main pet wears, then the two are apart");
+        var mine = new CustomGear { Name = "내 리본", Slot = "head", ImagePath = @"C:\pictures\ribbon.png" }; twoAgain.RegisterCustom(mine, true); var moved2 = twoAgain.State.For(false); moved2.Places[mine.Id] = new GearPlace(90, 1, 2, 3); twoAgain.Place(moved2);
+        Check(twoAgain.State.Wearing(mine.Id)!.WidthPercent == 90 && twoAgain.State.For(true).Wearing(mine.Id)!.WidthPercent == 35 && twoAgain.State.CustomItems.Single().WidthPercent == 35, "The user's own gear is placed per pet too, and keeps the place it was registered with");
+        twoAgain.RegisterCustom(mine with { WidthPercent = 50 }, false); Check(twoAgain.State.Wearing(mine.Id)!.WidthPercent == 50 && !twoAgain.State.Equipped.ContainsKey("head"), "Registering it again starts from the numbers given");
         return checks;
     }
 }

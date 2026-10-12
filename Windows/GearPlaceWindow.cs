@@ -11,23 +11,26 @@ namespace KeyboardWorker;
 
 // Placing what the character wears by hand: drag an accessory to move it, turn the wheel over it to make it larger or
 // smaller (with Shift, to turn it); a button mirrors it left to right. The character is shown large with everything it has on, drawn by the same layers
-// as on the desktop. Nothing changes until "저장"; the places are kept per accessory (GameState.Places / CustomGear).
+// as on the desktop. Nothing changes until "저장". Each of the two pets has places of its own (GameState.Places of its outfit),
+// so the same accessory can sit differently on each.
 public sealed class GearPlaceWindow : Window
 {
     const double Side = 440;
-    readonly PetGame game; readonly GameState draft; readonly AccessoryLayer back = new() { BackLayer = true }, front = new();
+    readonly PetGame game; readonly GameState draft; readonly bool second; readonly AccessoryLayer back = new() { BackLayer = true }, front = new();
     readonly LazyImageCache pictures; readonly TextBlock status = Pastel.Text("", 12), chosenName = Pastel.Text("", 13);
     string chosen = ""; Point last; bool dragging, changed;
-    public GearPlaceWindow(Buddy buddy)
+    // second: the second pet's outfit is placed, on the second pet's picture.
+    public GearPlaceWindow(Buddy buddy, bool second = false)
     {
-        game = buddy.Game; draft = game.State.Snapshot(); draft.ShowAccessories = true;
+        game = buddy.Game; this.second = second; draft = game.State.For(second); draft.ShowAccessories = true;
+        string name = second ? buddy.SecondaryPreset?.Profile.Name ?? "둘째" : buddy.Chat.Preferences.Profile.Name; var images = second ? buddy.SecondaryPreset?.Images : buddy.Pref.ImagePaths;
         var root = new DockPanel { Margin = new Thickness(20) };
         var top = new StackPanel(); DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
-        top.Children.Add(Pastel.Text("악세서리 위치 편집", 20));
+        top.Children.Add(Pastel.Text("악세서리 위치 편집 · " + name, 20));
         top.Children.Add(new TextBlock { Text = "끌기: 위치   ·   휠: 크기   ·   Shift + 휠: 회전", Foreground = Pastel.Ink, FontSize = 13, Margin = new Thickness(0, 0, 0, 8) });
         var footer = new StackPanel(); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer); footer.Children.Add(chosenName); footer.Children.Add(status);
         var buttons = new WrapPanel();
-        buttons.Children.Add(Pastel.Button("저장", () => { game.Place(draft); changed = false; Close(); }));
+        buttons.Children.Add(Pastel.Button("저장", () => { game.Place(draft, second); changed = false; Close(); }));
         buttons.Children.Add(Pastel.Button("좌우 반전", () => { if (chosen.Length == 0) { status.Text = "먼저 악세서리를 골라 주세요."; return; } Change(g => g with { Flip = !g.Flip }); }, true));
         buttons.Children.Add(Pastel.Button("고른 것 처음 위치로", Reset, true));
         var copy = Pastel.Button("배치 값 복사", Copy, true); copy.ToolTip = "고른 악세서리의 위치·크기를 프로그램에 함께 넣는 목록(accessories.json)의 한 줄로 복사해요"; buttons.Children.Add(copy);
@@ -35,7 +38,7 @@ public sealed class GearPlaceWindow : Window
 
         // The character as it stands on the desktop, with the two layers of what it wears behind and in front of it.
         var portrait = new Image { Stretch = Stretch.Uniform }; BitmapSource? picture = null;
-        if (buddy.Pref.ImagePaths.TryGetValue("idle", out var file) && File.Exists(file))
+        if (images != null && images.TryGetValue("idle", out var file) && File.Exists(file))
             try { picture = ImageAssets.Read(file, 900); } catch (Exception e) when (e is IOException or NotSupportedException or UnauthorizedAccessException or ArgumentException or System.Runtime.InteropServices.COMException or FileFormatException) { }
         portrait.Source = picture; back.AvatarImage = front.AvatarImage = picture; back.Outfit = front.Outfit = draft;
         pictures = new LazyImageCache(Dispatcher, Redraw); back.CustomImage = front.CustomImage = pictures.Get;
@@ -72,19 +75,16 @@ public sealed class GearPlaceWindow : Window
         chosen = id; back.Marked = front.Marked = id; var gear = id.Length > 0 ? draft.Wearing(id) : null;
         chosenName.Text = gear == null ? "악세서리를 눌러 골라 주세요." : $"고른 것: {gear.Name}  ·  크기 {gear.WidthPercent:0.#}%  ·  위치 {gear.OffsetX:0.#}, {gear.OffsetY:0.#}  ·  회전 {gear.Rotation:0.#}°" + (gear.Flip ? "  ·  좌우 반전" : ""); Redraw();
     }
-    // The chosen accessory with something about it changed: the user's own gear is changed itself, a shipped one gets a place of its own.
+    // The chosen accessory with something about it changed: it gets a place of its own on this pet.
     void Change(Func<CustomGear, CustomGear> change)
     {
-        var gear = draft.Wearing(chosen); if (gear == null) return; var next = change(gear).Normalized(); int own = draft.CustomItems.FindIndex(c => c.Id == chosen);
-        if (own >= 0) draft.CustomItems[own] = next; else draft.Places[chosen] = GearPlace.Of(next);
-        changed = true; status.Text = ""; Choose(chosen);
+        var gear = draft.Wearing(chosen); if (gear == null) return;
+        draft.Places[chosen] = GearPlace.Of(change(gear).Normalized()); changed = true; status.Text = ""; Choose(chosen);
     }
     void Reset()
     {
         if (chosen.Length == 0) { status.Text = "먼저 악세서리를 골라 주세요."; return; }
-        int own = draft.CustomItems.FindIndex(c => c.Id == chosen);
-        if (own >= 0) { var saved = game.State.CustomItems.Find(c => c.Id == chosen); if (saved != null) draft.CustomItems[own] = saved; } else draft.Places.Remove(chosen);
-        changed = true; Choose(chosen); status.Text = own >= 0 ? "저장돼 있던 위치로 되돌렸어요." : "처음 위치로 되돌렸어요.";
+        draft.Places.Remove(chosen); changed = true; Choose(chosen); status.Text = "처음 위치로 되돌렸어요.";
     }
     void Copy()
     {

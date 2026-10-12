@@ -12,16 +12,18 @@ public sealed class GameWindow : Window
     readonly PetGame game;
     readonly TextBlock summary = Pastel.Text("", 20), progress = Pastel.Text(""), goals = Pastel.Text(""), badges = Pastel.Text(""), status = Pastel.Text("");
     readonly ProgressBar xp = new() { Height = 12, Maximum = 1, Margin = new Thickness(0, 6, 0, 12), Foreground = Pastel.Pink };
-    readonly GearShelf shop, inventory;
+    readonly GearShelf shop, inventory; readonly WrapPanel who = new() { Margin = new Thickness(0, 0, 0, 8) };
+    // Whose outfit the shop, the wardrobe, the placement window and the anchors below are about: the main pet's or the second pet's.
+    bool second; GameState wear;
     readonly Dictionary<string, Button> questButtons = new();
     readonly Dictionary<string, CheckBox> toggles = new();
     readonly Dictionary<string, Slider> anchors = new();
     readonly System.Windows.Threading.DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
     public GameWindow(Buddy buddy)
     {
-        this.buddy = buddy; game = buddy.Game; shop = new GearShelf(Bought, _ => null); inventory = new GearShelf(tile => Wear(tile.Id, tile.Name), Options);
+        this.buddy = buddy; game = buddy.Game; wear = game.State.For(false); shop = new GearShelf(Bought, _ => null); inventory = new GearShelf(tile => Wear(tile.Id, tile.Name), Options);
         var root = new DockPanel { Margin = new Thickness(18) }; var footer = new StackPanel(); footer.Children.Add(status); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
-        var header = new StackPanel(); header.Children.Add(summary); header.Children.Add(xp); header.Children.Add(progress); DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
+        var header = new StackPanel(); header.Children.Add(summary); header.Children.Add(xp); header.Children.Add(progress); header.Children.Add(who); DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
         var tabs = new TabControl { Background = Pastel.Paper, BorderBrush = Pastel.Pink }; root.Children.Add(tabs);
         StackPanel Tab(string name) { var p = new StackPanel { Margin = new Thickness(16) }; tabs.Items.Add(new TabItem { Header = name, Content = Pastel.Scroll(p), Padding = new Thickness(13, 8, 13, 8) }); return p; }
         var growth = Tab("성장·목표"); growth.Children.Add(Pastel.Text("작은 작업이 작은 모험이 돼요 ♡", 21));
@@ -64,8 +66,8 @@ public sealed class GameWindow : Window
         }, true));
         options.Children.Add(Pastel.Button("꾸미기·설정 저장", () => Run(() =>
         {
-            var next = game.State.Snapshot(); foreach (var pair in toggles) typeof(GameState).GetProperty(pair.Key)!.SetValue(next, pair.Value.IsChecked == true);
-            foreach (var pair in anchors) typeof(GameState).GetProperty(pair.Key)!.SetValue(next, pair.Value.Value); game.Options(next); status.Text = "저장했어요 ♡";
+            var next = game.State.For(second); foreach (var pair in toggles) typeof(GameState).GetProperty(pair.Key)!.SetValue(next, pair.Value.IsChecked == true);
+            foreach (var pair in anchors) typeof(GameState).GetProperty(pair.Key)!.SetValue(next, pair.Value.Value); game.Options(next, second); status.Text = "저장했어요 ♡";
         })));
         Pastel.Window(this, "친구의 작은 모험", root, 780, 800); game.Changed += Rebuild; timer.Tick += (_, _) => Refresh(); timer.Start();
         Closed += (_, _) => { timer.Stop(); game.Changed -= Rebuild; game.Save(); }; Rebuild();
@@ -91,19 +93,30 @@ public sealed class GameWindow : Window
         }
         badges.Text = game.State.Badges.Count == 0 ? "첫 작업, 첫 쇼핑, 목표 달성으로 기념 배지를 모아 보세요." : string.Join("\n", game.State.Badges.Select(id => "☆ " + PetGame.BadgeNames[id]));
     }
-    void Place() => new GearPlaceWindow(buddy) { Owner = this, ShowInTaskbar = false }.ShowDialog();
-    bool Worn(string slot, string id) => game.State.Equipped.GetValueOrDefault(slot, "") == id;
+    void Place() => new GearPlaceWindow(buddy, second) { Owner = this, ShowInTaskbar = false }.ShowDialog();
+    bool Worn(string slot, string id) => wear.Equipped.GetValueOrDefault(slot, "") == id;
+    // With two pets there is a choice of whom to dress; the anchors shown are that pet's.
+    void Who()
+    {
+        who.Children.Clear(); var partner = buddy.SecondaryPreset; if (partner == null) { second = false; return; }
+        who.Children.Add(new TextBlock { Text = "누구에게 입힐까요", Foreground = Pastel.Ink, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+        foreach (var (isSecond, name) in new[] { (false, "대표 · " + buddy.Chat.Preferences.Profile.Name), (true, "둘째 · " + partner.Profile.Name) })
+        {
+            var choice = Pastel.Button(name, () => { if (second == isSecond) return; second = isSecond; var now = game.State.For(second); foreach (var pair in anchors) pair.Value.Value = (double)typeof(GameState).GetProperty(pair.Key)!.GetValue(now)!; Rebuild(); }, true);
+            choice.Padding = new Thickness(12, 4, 12, 4); choice.FontSize = 12; choice.Margin = new Thickness(0, 0, 6, 0); Pastel.Select(choice, second == isSecond); who.Children.Add(choice);
+        }
+    }
     // The shop sells the accessories that came with the program; the wardrobe holds what was bought and the user's own gear.
     void Rebuild()
     {
-        Refresh(); var owned = game.State.Owned;
+        Who(); wear = game.State.For(second); Refresh(); var owned = game.State.Owned;
         shop.Show(ShopGear.Catalog.Select(item =>
         {
             bool mine = owned.Contains(item.Id), worn = Worn(item.Slot, item.Id), can = mine || (game.Level >= item.Level && game.State.Coins >= item.Price);
             string note = worn ? "장착 중" : mine ? "보유 중" : item.Price + "코인" + (item.Level > 1 ? " · Lv." + item.Level : "");
             return new GearShelf.Tile(item.Id, item.Name, item.Slot, ShopGear.Items.First(g => g.Id == item.Id).ImagePath, note, worn, !can, item.Description + (mine ? "" : game.Level < item.Level ? $"\nLv.{item.Level}부터 살 수 있어요" : game.State.Coins < item.Price ? "\n코인이 부족해요" : "\n누르면 사서 입혀요"));
         }), "아직 파는 악세서리가 없어요. 내 그림은 옷장의 '+ 내 장비 등록'으로 바로 입힐 수 있어요.");
-        inventory.Show(game.State.Gear.Where(g => owned.Contains(g.Id)).Select(g => new GearShelf.Tile(g.Id, g.Name, g.Slot, g.ImagePath, Worn(g.Slot, g.Id) ? "장착 중" : ShopGear.Has(g.Id) ? "" : "내 장비", Worn(g.Slot, g.Id), false, "누르면 입고 벗어요 · 오른쪽 클릭: 더 보기")),
+        inventory.Show(wear.Gear.Where(g => owned.Contains(g.Id)).Select(g => new GearShelf.Tile(g.Id, g.Name, g.Slot, g.ImagePath, Worn(g.Slot, g.Id) ? "장착 중" : ShopGear.Has(g.Id) ? "" : "내 장비", Worn(g.Slot, g.Id), false, "누르면 입고 벗어요 · 오른쪽 클릭: 더 보기")),
             "아직 아이템이 없어요. 상점에서 골라 보거나 '+ 내 장비 등록'으로 내 그림을 넣어 보세요 ♡");
     }
     // A click in the shop: what is owned is put on or taken off; what is not is bought (after asking) and put on.
@@ -114,12 +127,12 @@ public sealed class GameWindow : Window
         if (game.Level < item.Level) { status.Text = $"{item.Name}은(는) Lv.{item.Level}부터 살 수 있어요."; return; }
         if (game.State.Coins < item.Price) { status.Text = $"코인이 부족해요. ({item.Price}코인 필요 · 보유 {game.State.Coins:N0}코인)"; return; }
         if (MessageBox.Show(this, $"{item.Name}을(를) {item.Price}코인에 살까요?", "상점", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        Run(() => { game.Buy(item.Id); game.Equip(item.Id); status.Text = item.Name + " 장착했어요 ♡"; });
+        Run(() => { game.Buy(item.Id); game.Equip(item.Id, second); status.Text = item.Name + " 장착했어요 ♡"; });
     }
     void Wear(string id, string name) => Run(() =>
     {
-        var gear = game.State.Wearing(id); if (gear == null) return;
-        if (Worn(gear.Slot, id)) { game.Remove(gear.Slot); status.Text = name + " 벗었어요."; } else { game.Equip(id); status.Text = name + " 장착했어요 ♡"; }
+        var gear = wear.Wearing(id); if (gear == null) return;
+        if (Worn(gear.Slot, id)) { game.Remove(gear.Slot, second); status.Text = name + " 벗었어요."; } else { game.Equip(id, second); status.Text = name + " 장착했어요 ♡"; }
     });
     // The right-click menu of the wardrobe.
     ContextMenu Options(GearShelf.Tile tile)

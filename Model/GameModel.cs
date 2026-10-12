@@ -23,10 +23,26 @@ public sealed class GameState
     public HashSet<string> ClaimedQuests { get; set; } = new();
     public HashSet<string> Badges { get; set; } = new();
     public List<CustomGear> CustomItems { get; set; } = new();
-    // Everything that is drawn from a picture: the user's own gear and the accessories that came with the program.
-    // Where the user moved an accessory that came with the program (by its id). Their own gear keeps its place in itself.
+    // Where an accessory was moved to by hand on this pet (by its id); without an entry it sits where it says itself.
     public Dictionary<string, GearPlace> Places { get; set; } = new();
-    [System.Text.Json.Serialization.JsonIgnore] public IEnumerable<CustomGear> Gear => CustomItems.Concat(ShopGear.Items.Select(g => Places.TryGetValue(g.Id, out var place) ? g with { WidthPercent = place.Width, OffsetX = place.X, OffsetY = place.Y, Rotation = place.Rotation, Flip = place.Flip } : g));
+    // What the second pet has on. The main pet's is in this object itself (Equipped, Places, the anchors and the scale).
+    public Wear? Second { get; set; }
+    // Everything that is drawn from a picture - the user's own gear and the accessories that came with the program - placed as on this pet.
+    [System.Text.Json.Serialization.JsonIgnore] public IEnumerable<CustomGear> Gear => CustomItems.Concat(ShopGear.Items).Select(g => Places.TryGetValue(g.Id, out var place) ? g with { WidthPercent = place.Width, OffsetX = place.X, OffsetY = place.Y, Rotation = place.Rotation, Flip = place.Flip } : g);
+    // The state as one of the two pets wears it: for the second pet, with what it has on in place of the main pet's.
+    // Everything that draws or changes an outfit works on such a view; Take stores it back.
+    public GameState For(bool second)
+    {
+        var copy = Snapshot(); if (!second || Second is not { } wear) return copy;
+        copy.Equipped = new(wear.Equipped ?? new()); copy.Places = new(wear.Places ?? new());
+        copy.HeadX = wear.HeadX; copy.HeadY = wear.HeadY; copy.FaceX = wear.FaceX; copy.FaceY = wear.FaceY; copy.NeckX = wear.NeckX; copy.NeckY = wear.NeckY; copy.AccessoryScale = wear.AccessoryScale; return copy;
+    }
+    public void Take(bool second, GameState from)
+    {
+        var wear = new Wear { Equipped = new(from.Equipped), Places = new(from.Places), HeadX = from.HeadX, HeadY = from.HeadY, FaceX = from.FaceX, FaceY = from.FaceY, NeckX = from.NeckX, NeckY = from.NeckY, AccessoryScale = from.AccessoryScale };
+        if (second) { Second = wear; return; }
+        Equipped = wear.Equipped; Places = wear.Places; HeadX = wear.HeadX; HeadY = wear.HeadY; FaceX = wear.FaceX; FaceY = wear.FaceY; NeckX = wear.NeckX; NeckY = wear.NeckY; AccessoryScale = wear.AccessoryScale;
+    }
     public CustomGear? Wearing(string id) { foreach (var gear in Gear) if (gear.Id == id) return gear; return null; }
     public bool Enabled { get; set; } = true;
     public bool ShowBadge { get; set; } = true;
@@ -48,6 +64,7 @@ public sealed class GameState
         copy.ClaimedQuests = new(ClaimedQuests);
         copy.Badges = new(Badges);
         copy.CustomItems = new(CustomItems); copy.Places = new(Places);
+        if (Second is { } wear) copy.Second = new Wear { Equipped = new(wear.Equipped ?? new()), Places = new(wear.Places ?? new()), HeadX = wear.HeadX, HeadY = wear.HeadY, FaceX = wear.FaceX, FaceY = wear.FaceY, NeckX = wear.NeckX, NeckY = wear.NeckY, AccessoryScale = wear.AccessoryScale };
         return copy;
     }
     public void Normalize()
@@ -58,20 +75,36 @@ public sealed class GameState
         Owned ??= new(); Equipped ??= new(); ClaimedQuests ??= new(); Badges ??= new();
         CustomItems ??= new();
         CustomItems = CustomItems.Where(c => c != null && c.Id != null && c.Id.StartsWith("custom-", StringComparison.Ordinal) && CustomGear.Slots.Contains(c.Slot) && !string.IsNullOrWhiteSpace(c.ImagePath)).GroupBy(c => c.Id).Select(g => g.First().Normalized()).Take(50).ToList();
-        Places ??= new(); foreach (var id in Places.Keys.ToArray()) { if (Places[id] == null || ShopGear.Items.All(g => g.Id != id)) Places.Remove(id); else Places[id] = Places[id].Normalized(); }
         var catalog = ShopGear.Catalog.Concat(CustomItems.Select(c => new ShopItem(c.Id, c.Name, c.Slot, 0, 1, "직접 등록한 장비"))).ToArray();
         Owned.RemoveWhere(id => !catalog.Any(i => i.Id == id));
-        foreach (var slot in Equipped.Keys.ToArray()) if (!catalog.Any(i => i.Id == Equipped[slot] && i.Slot == slot) || !Owned.Contains(Equipped[slot])) Equipped.Remove(slot);
         ClaimedQuests.RemoveWhere(id => !PetGame.Quests.Any(q => q.Id == id)); Badges.RemoveWhere(id => !PetGame.BadgeNames.ContainsKey(id));
+        Clean(catalog);
+        // The second pet starts out wearing what the main pet wears (as it did before each had its own); from then on the two are apart.
+        if (Second == null) Take(true, this); else { var view = For(true); view.Clean(catalog); Take(true, view); }
+    }
+    // What this pet has on, kept to what exists and is owned, and within bounds.
+    void Clean(ShopItem[] catalog)
+    {
+        Equipped ??= new(); Places ??= new();
+        foreach (var slot in Equipped.Keys.ToArray()) if (!catalog.Any(i => i.Id == Equipped[slot] && i.Slot == slot) || !Owned.Contains(Equipped[slot])) Equipped.Remove(slot);
+        foreach (var id in Places.Keys.ToArray()) { if (Places[id] == null || catalog.All(i => i.Id != id)) Places.Remove(id); else Places[id] = Places[id].Normalized(); }
         static double Safe(double v, double fallback, double min, double max) => double.IsFinite(v) ? Math.Clamp(v, min, max) : fallback;
-        HeadX = Safe(HeadX, 50, 0, 100);
-        HeadY = Safe(HeadY, 15, 0, 100);
-        FaceX = Safe(FaceX, 50, 0, 100);
-        FaceY = Safe(FaceY, 40, 0, 100);
-        NeckX = Safe(NeckX, 50, 0, 100);
-        NeckY = Safe(NeckY, 61, 0, 100);
+        HeadX = Safe(HeadX, 50, 0, 100); HeadY = Safe(HeadY, 15, 0, 100); FaceX = Safe(FaceX, 50, 0, 100); FaceY = Safe(FaceY, 40, 0, 100); NeckX = Safe(NeckX, 50, 0, 100); NeckY = Safe(NeckY, 61, 0, 100);
         AccessoryScale = Safe(AccessoryScale, 1, .5, 2);
     }
+}
+// What one pet has on and where: which accessory in each place, where each was moved to by hand, the anchors on its picture and the scale.
+public sealed class Wear
+{
+    public Dictionary<string, string> Equipped { get; set; } = new();
+    public Dictionary<string, GearPlace> Places { get; set; } = new();
+    public double HeadX { get; set; } = 50;
+    public double HeadY { get; set; } = 15;
+    public double FaceX { get; set; } = 50;
+    public double FaceY { get; set; } = 40;
+    public double NeckX { get; set; } = 50;
+    public double NeckY { get; set; } = 61;
+    public double AccessoryScale { get; set; } = 1;
 }
 // Size (a share of the character's width), offset from the slot's anchor (percent), turn and mirroring of one accessory.
 public sealed record GearPlace(double Width, double X, double Y, double Rotation, bool Flip = false)
@@ -150,13 +183,17 @@ public sealed class PetGame
         if (State.Coins < item.Price) throw new InvalidOperationException("코인이 부족해요.");
         State.Coins -= item.Price; State.Owned.Add(id); Badge("first-shop"); Updated(); Save();
     }
-    public void Equip(string id)
+    // second: the second pet puts it on (what is owned is shared; what each wears is its own).
+    public void Equip(string id, bool second = false)
     {
         var item = Catalog.SingleOrDefault(i => i.Id == id) ?? throw new InvalidOperationException("알 수 없는 아이템입니다.");
         if (!State.Owned.Contains(id)) throw new InvalidOperationException("먼저 아이템을 구매해 주세요.");
-        State.Equipped[item.Slot] = id; Updated(); Save();
+        Change(second, wear => wear.Equipped[item.Slot] = id);
     }
-    public void Remove(string slot) { State.Equipped.Remove(slot); Updated(); Save(); }
+    public void Remove(string slot, bool second = false) => Change(second, wear => wear.Equipped.Remove(slot));
+    void Change(bool second, Action<GameState> change) { var wear = State.For(second); change(wear); State.Take(second, wear); Updated(); Save(); }
+    // Nobody wears it any more.
+    void TakeOff(string id) { foreach (bool second in new[] { false, true }) { var wear = State.For(second); foreach (var slot in wear.Equipped.Keys.Where(k => wear.Equipped[k] == id).ToArray()) wear.Equipped.Remove(slot); wear.Places.Remove(id); State.Take(second, wear); } }
     public void SpendCoins(int coins) { if (coins < 0 || State.Coins < coins) throw new InvalidOperationException($"코인이 부족합니다. ({coins}코인 필요 · 보유 {State.Coins}코인)"); State.Coins -= coins; Updated(); Save(); }
     // Coins from attendance, goals, events and achievements.
     public void Earn(int coins) { if (coins <= 0) return; State.Coins += coins; Updated(); }
@@ -170,12 +207,12 @@ public sealed class PetGame
         if (string.IsNullOrWhiteSpace(item.Name) || !CustomGear.Slots.Contains(item.Slot) || !item.Id.StartsWith("custom-", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(item.ImagePath)) throw new InvalidOperationException("장비 이름·종류·이미지를 확인해 주세요.");
         int index = State.CustomItems.FindIndex(c => c.Id == item.Id);
         if (index < 0 && State.CustomItems.Count >= 50) throw new InvalidOperationException("커스텀 장비는 최대 50개까지 등록할 수 있어요.");
+        // Its place and where it is worn were just written anew, so what the pets had of it by hand goes.
         if (index >= 0) State.CustomItems[index] = item.Normalized(); else State.CustomItems.Add(item.Normalized());
-        foreach (var slot in State.Equipped.Keys.Where(k => State.Equipped[k] == item.Id && (k != item.Slot || !equip)).ToArray()) State.Equipped.Remove(slot);
-        State.Owned.Add(item.Id); if (equip) State.Equipped[item.Slot] = item.Id; Updated(); Save();
+        TakeOff(item.Id); State.Owned.Add(item.Id); if (equip) State.Equipped[item.Slot] = item.Id; Updated(); Save();
     }
-    // The places worked out in the placement window: taken over as they are.
-    public void Place(GameState placed) { State.CustomItems = placed.CustomItems.Select(c => c.Normalized()).ToList(); State.Places = new(placed.Places); State.Normalize(); Updated(); Save(); }
+    // The places worked out in the placement window for one pet: taken over as they are.
+    public void Place(GameState placed, bool second = false) { State.Take(second, placed); State.Normalize(); Updated(); Save(); }
     public void RemapImages(IReadOnlyDictionary<string, string> merge)
     {
         for (int i = 0; i < State.CustomItems.Count; i++) State.CustomItems[i] = State.CustomItems[i] with { ImagePath = ImageDiet.Map(merge, State.CustomItems[i].ImagePath) };
@@ -184,32 +221,24 @@ public sealed class PetGame
     public void DeleteCustom(string id)
     {
         if (!State.CustomItems.Any(c => c.Id == id)) throw new InvalidOperationException("커스텀 장비를 선택해 주세요.");
-        State.CustomItems.RemoveAll(c => c.Id == id); State.Owned.Remove(id);
-        foreach (var slot in State.Equipped.Keys.Where(k => State.Equipped[k] == id).ToArray()) State.Equipped.Remove(slot); Updated(); Save();
+        State.CustomItems.RemoveAll(c => c.Id == id); State.Owned.Remove(id); TakeOff(id); Updated(); Save();
     }
     public void DeleteOwned(string id)
     {
         if (!State.Owned.Contains(id)) throw new InvalidOperationException("보유한 장비를 선택해 주세요.");
         if (State.CustomItems.Any(c => c.Id == id)) { DeleteCustom(id); return; }
         if (ShopGear.Catalog.All(i => i.Id != id)) throw new InvalidOperationException("알 수 없는 장비입니다.");
-        State.Owned.Remove(id);
-        foreach (var slot in State.Equipped.Keys.Where(k => State.Equipped[k] == id).ToArray()) State.Equipped.Remove(slot);
-        Updated(); Save();
+        State.Owned.Remove(id); TakeOff(id); Updated(); Save();
     }
-    public void Options(GameState options)
+    // The switches are the program's; the anchors and the scale are those of the pet the view (For) was of.
+    public void Options(GameState options, bool second = false)
     {
+        var wear = State.For(second); wear.HeadX = options.HeadX; wear.HeadY = options.HeadY; wear.FaceX = options.FaceX; wear.FaceY = options.FaceY; wear.NeckX = options.NeckX; wear.NeckY = options.NeckY; wear.AccessoryScale = options.AccessoryScale; State.Take(second, wear);
         State.Enabled = options.Enabled;
         State.ShowBadge = options.ShowBadge;
         State.ShowAccessories = options.ShowAccessories;
         State.Announcements = options.Announcements;
         State.ShareWithAi = options.ShareWithAi;
-        State.HeadX = options.HeadX;
-        State.HeadY = options.HeadY;
-        State.FaceX = options.FaceX;
-        State.FaceY = options.FaceY;
-        State.NeckX = options.NeckX;
-        State.NeckY = options.NeckY;
-        State.AccessoryScale = options.AccessoryScale;
         Updated(); Save();
     }
     public void Save(bool force = false) { if (!dirty && !force) return; OrderedStore.SaveJson(path, State.Snapshot()); dirty = false; }

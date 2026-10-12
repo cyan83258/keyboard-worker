@@ -102,8 +102,9 @@ public sealed class CompanionWindow : Window, IPetAnchor
     }
     void RefreshGear()
     {
-        front.Outfit = back.Outfit = owner.Game.State;
-        gear.Configure(new Preferences { ImagePaths = owner.Game.State.Gear.Where(c => owner.Game.State.Equipped.Values.Contains(c.Id)).ToDictionary(c => c.Id, c => c.ImagePath) }, appearance.Size + 60);
+        // The second pet has an outfit of its own.
+        var outfit = owner.Game.State.For(true); front.Outfit = back.Outfit = outfit;
+        gear.Configure(new Preferences { ImagePaths = outfit.Gear.Where(c => outfit.Equipped.Values.Contains(c.Id)).ToDictionary(c => c.Id, c => c.ImagePath) }, appearance.Size + 60);
         front.InvalidateVisual(); back.InvalidateVisual();
     }
     void Display(string next)

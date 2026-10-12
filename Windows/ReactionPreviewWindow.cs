@@ -44,7 +44,7 @@ public sealed class ReactionPreviewWindow : Window
         Pastel.Window(this, "타이핑 반응 미리보기", Pastel.Scroll(p), 560, 650);
         images = new(Dispatcher, () => Display(pose)); gear = new(Dispatcher, () => { front.InvalidateVisual(); back.InvalidateVisual(); });
         images.Configure(buddy.Pref.Snapshot(), 400); var outfit = buddy.Game.State.Snapshot(); front.Outfit = outfit; back.Outfit = outfit;
-        gear.Configure(new Preferences { ImagePaths = outfit.CustomItems.Where(c => outfit.Equipped.Values.Contains(c.Id)).ToDictionary(c => c.Id, c => c.ImagePath) }, 400);
+        gear.Configure(new Preferences { ImagePaths = outfit.Gear.Where(c => outfit.Equipped.Values.Contains(c.Id)).ToDictionary(c => c.Id, c => c.ImagePath) }, 400);
         front.CustomImage = gear.Get;
         back.CustomImage = gear.Get;
         settle.Tick += (_, _) => { settle.Stop(); Display("idle"); };
