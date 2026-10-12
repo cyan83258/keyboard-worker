@@ -95,10 +95,11 @@ public sealed class GameWindow : Window
     {
         Refresh(); shop.Children.Clear(); inventory.Children.Clear(); previews.Clear();
         previewCache.Configure(new Preferences { ImagePaths = game.State.CustomItems.ToDictionary(c => c.Id, c => c.ImagePath) }, 120);
-        foreach (var item in PetGame.Items)
+        // What the program draws itself, then the accessories that came with it as pictures.
+        foreach (var item in PetGame.Items.Concat(ShopGear.Catalog))
         {
             var content = new DockPanel();
-            var icon = new ItemPreview { ItemId = item.Id, Width = 80, Height = 70, Margin = new Thickness(0, 0, 12, 0) };
+            var shipped = ShopGear.Items.FirstOrDefault(g => g.Id == item.Id); FrameworkElement icon = shipped != null ? StageParts.Picture(shipped.ImagePath, 70) : new ItemPreview { ItemId = item.Id, Width = 80, Height = 70 }; icon.Margin = new Thickness(shipped == null ? 0 : 5, 0, shipped == null ? 12 : 17, 0);
             DockPanel.SetDock(icon, Dock.Left);
             content.Children.Add(icon);
             var p = new StackPanel(); p.Children.Add(Pastel.Text($"{item.Name} · {item.Price}코인 · Lv.{item.Level}", 17)); p.Children.Add(Pastel.Text(item.Description, 12));

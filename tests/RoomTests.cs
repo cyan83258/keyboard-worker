@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -89,6 +90,21 @@ public static class RoomTests
         Check(new StageBook(Path.Combine(home, "stickers"), Path.Combine(home, "nothing-here")).State.Stickers.Select(s => s.Title).SequenceEqual(new[] { "이모티콘", "엄지척", "울먹이는 고양이" }), "Their order is saved");
         string withStickers = StageTalk.TextRules(true, noTurns, new[] { "엄지척", "울먹이는 고양이" }), withoutStickers = StageTalk.TextRules(true, noTurns);
         Check(withStickers.Contains("제목은 다음 중에서만 고릅니다: 엄지척, 울먹이는 고양이") && withStickers.Contains("제목이 말하는 감정") && withoutStickers.Contains("그림 이모티콘을 보낼 수 없습니다") && StageTalk.TextRules(true, new[] { new ChatTurn("ㅎㅇ", "왔군.\n[이모티콘: 엄지척]", DateTimeOffset.Now, "루카") }, new[] { "엄지척" }).Contains("그림 이모티콘도 하나도"), "The model knows an emoticon by its title, may send one of the user's, and not twice running");
+
+        // ---- accessories that come with the program ----
+        Check(ShopGear.FromName("head_고양이 귀_300.png") == ("head", "고양이 귀", 300) && ShopGear.FromName("FACE_하트 선글라스_450.png") == ("face", "하트 선글라스", 450) && ShopGear.FromName("neck_빨간 리본.png") == ("neck", "빨간 리본", ShopGear.StandardPrice) && ShopGear.FromName("왕관.png") == ("head", "왕관", ShopGear.StandardPrice) && ShopGear.FromName("head.png") == ("head", "head", ShopGear.StandardPrice) && ShopGear.FromName("별_무리_120.jpg") == ("head", "별 무리", 120), "A file name says where an accessory is worn, what it is called and what it costs");
+        string gearHome = Path.Combine(home, "accessories"); Directory.CreateDirectory(gearHome);
+        foreach (string name in new[] { "head_고양이 귀_300.png", "face_안경.png", "설명.txt" }) File.WriteAllBytes(Path.Combine(gearHome, name), new byte[] { 1 });
+        File.WriteAllText(Path.Combine(gearHome, "accessories.json"), "[ { \"file\": \"face_안경.png\", \"name\": \"동글 안경\", \"price\": 80, \"level\": 3, \"description\": \"동그란 안경\", \"width\": 48, \"x\": 1.5, \"y\": -4, \"behind\": true }, { \"file\": \"없는 파일.png\", \"price\": 1 } ]");
+        ShopGear.Load(gearHome);
+        Check(ShopGear.Items.Count == 2 && ShopGear.Catalog.Count == 2 && ShopGear.Catalog[1] is { Id: "shop-head_고양이 귀_300", Name: "고양이 귀", Slot: "head", Price: 300, Level: 1 } && ShopGear.Catalog[0] is { Id: "shop-face_안경", Name: "동글 안경", Slot: "face", Price: 80, Level: 3, Description: "동그란 안경" } && ShopGear.Items[0] is { WidthPercent: 48, OffsetX: 1.5, OffsetY: -4, Behind: true } && ShopGear.Items[1].WidthPercent == 35 && ShopGear.Has("shop-face_안경") && !ShopGear.Has("custom-1"), "Pictures in the folder are sold; the list places them and may rename and reprice them");
+        var play = new PetGame(Path.Combine(home, "game")); play.Earn(1000); bool early = false; try { play.Buy("shop-face_안경"); } catch (InvalidOperationException) { early = true; }
+        long before = play.State.Coins; play.Buy("shop-head_고양이 귀_300"); play.Equip("shop-head_고양이 귀_300");
+        Check(early && play.State.Coins <= before - 250 && play.State.Coins > before - 300 - 1 && play.State.Equipped["head"] == "shop-head_고양이 귀_300" && play.State.Gear.Any(g => g.Id == "shop-head_고양이 귀_300" && g.ImagePath.EndsWith(".png")) && play.Catalog.Count(i => ShopGear.Has(i.Id)) == 2, "A shipped accessory is bought with coins and worn like any other, and its level is asked for");
+        play.Save(); OrderedStore.FlushAsync().GetAwaiter().GetResult(); Check(new PetGame(Path.Combine(home, "game")).State.Equipped.GetValueOrDefault("head") == "shop-head_고양이 귀_300", "It is still worn after a restart");
+        ShopGear.Load(Path.Combine(home, "nothing-here")); var gone = new PetGame(Path.Combine(home, "game"));
+        Check(ShopGear.Items.Count == 0 && !gone.State.Equipped.ContainsKey("head") && !gone.State.Owned.Contains("shop-head_고양이 귀_300"), "Without the folder there are none, and what is no longer sold leaves the wardrobe");
+        Check(ShopGear.Describe(new CustomGear { Name = "고양이 귀", Slot = "head", WidthPercent = 42, OffsetY = -6 }, "head_고양이 귀_300.png") is { } copied && copied.Contains("\"file\":\"head_고양이 귀_300.png\"") && copied.Contains("\"width\":42") && copied.Contains("\"y\":-6") && copied.Contains("\"behind\":false"), "A placement worked out in the program is written as a line of the list");
 
         // ---- back to how it was first installed ----
         string resetHome = Path.Combine(home, "reset"); Directory.CreateDirectory(Path.Combine(resetHome, "images")); File.WriteAllText(Path.Combine(resetHome, "settings.json"), "{}"); File.WriteAllText(Path.Combine(resetHome, "images", "a.png"), "x");

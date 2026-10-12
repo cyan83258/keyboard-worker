@@ -1,4 +1,4 @@
-﻿# Makes the package for other people: dist\KeyboardWorker\ and dist\KeyboardWorker-win-x64.zip.
+# Makes the package for other people: dist\KeyboardWorker\ and dist\KeyboardWorker-win-x64.zip.
 #   powershell -ExecutionPolicy Bypass -File tools\make-dist.ps1
 # The package is built from source and contains the program and the .NET runtime only. Your own settings, API keys,
 # presets and pictures live in %LOCALAPPDATA%\KeyboardWorker and are never read here. As a last step the program files
@@ -16,7 +16,7 @@ if ($LASTEXITCODE -ne 0) { Write-Host 'Publish failed.'; exit 1 }
 Copy-Item (Join-Path $PSScriptRoot '읽어주세요.txt') (Join-Path $folder '읽어주세요.txt') -Force
 
 # Only program files may be in the package.
-$unexpected = Get-ChildItem $folder -Recurse -File | Where-Object { -not ($_.FullName -like (Join-Path $folder 'backgrounds\*') -and $_.Extension -in '.png', '.jpg', '.jpeg') -and $_.Extension -notin '.dll', '.exe' -and $_.Name -notin 'KeyboardWorker.deps.json', 'KeyboardWorker.runtimeconfig.json', '읽어주세요.txt' }
+$unexpected = Get-ChildItem $folder -Recurse -File | Where-Object { -not ($_.FullName -like (Join-Path $folder 'backgrounds\*') -and $_.Extension -in '.png', '.jpg', '.jpeg') -and -not ($_.FullName -like (Join-Path $folder 'accessories\*') -and $_.Extension -in '.png', '.jpg', '.jpeg', '.json') -and $_.Extension -notin '.dll', '.exe' -and $_.Name -notin 'KeyboardWorker.deps.json', 'KeyboardWorker.runtimeconfig.json', '읽어주세요.txt' }
 if ($unexpected) { Write-Host 'Unexpected files in the package:'; $unexpected | ForEach-Object { Write-Host "  $($_.FullName)" }; exit 1 }
 
 $hits = 0

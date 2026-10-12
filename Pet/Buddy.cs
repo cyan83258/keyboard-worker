@@ -499,7 +499,7 @@ public sealed partial class Buddy : Window, IPetAnchor
     {
         gameBadge.Content = $"Lv.{Game.Level} · {Game.State.Coins:N0}코인"; gameBadge.Visibility = Game.State.ShowBadge ? Visibility.Visible : Visibility.Collapsed;
         var outfit = Game.State.Snapshot(); accessories.Outfit = outfit; backAccessories.Outfit = outfit;
-        var images = new Preferences { ImagePaths = outfit.CustomItems.Where(c => outfit.Equipped.Values.Contains(c.Id)).ToDictionary(c => c.Id, c => c.ImagePath) };
+        var images = new Preferences { ImagePaths = outfit.Gear.Where(c => outfit.Equipped.Values.Contains(c.Id)).ToDictionary(c => c.Id, c => c.ImagePath) };
         double dpi = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1;
         equipmentImages.Configure(images, Math.Clamp((int)Math.Ceiling((Pref.Size + 60) * outfit.AccessoryScale * dpi), 100, 1024));
         accessories.InvalidateVisual(); backAccessories.InvalidateVisual(); ResizePet(); if (hwnd != IntPtr.Zero) ClampPosition();

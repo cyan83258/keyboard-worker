@@ -103,7 +103,7 @@ public sealed class CompanionWindow : Window, IPetAnchor
     void RefreshGear()
     {
         front.Outfit = back.Outfit = owner.Game.State;
-        gear.Configure(new Preferences { ImagePaths = owner.Game.State.CustomItems.Where(c => owner.Game.State.Equipped.Values.Contains(c.Id)).ToDictionary(c => c.Id, c => c.ImagePath) }, appearance.Size + 60);
+        gear.Configure(new Preferences { ImagePaths = owner.Game.State.Gear.Where(c => owner.Game.State.Equipped.Values.Contains(c.Id)).ToDictionary(c => c.Id, c => c.ImagePath) }, appearance.Size + 60);
         front.InvalidateVisual(); back.InvalidateVisual();
     }
     void Display(string next)

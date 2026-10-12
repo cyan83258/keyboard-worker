@@ -1,4 +1,4 @@
-﻿# Builds the program, runs the unit tests and copies the result into app\ (the copy you actually run).
+# Builds the program, runs the unit tests and copies the result into app\ (the copy you actually run).
 #   powershell -ExecutionPolicy Bypass -File tools\build-app.ps1            build + tests + copy
 #   powershell -ExecutionPolicy Bypass -File tools\build-app.ps1 -Smoke     also open every window once (screenshots land in bin\)
 # Nothing is copied when the build or a test fails, or while Keyboard Worker is running.
@@ -38,4 +38,7 @@ foreach ($name in $programFiles) { Copy-Item (Join-Path $out $name) (Join-Path $
 # Backgrounds that come with the program (Assets\Backgrounds): the app copy holds exactly what the build holds.
 $pictures = Join-Path $app 'backgrounds'; if (Test-Path $pictures) { [IO.Directory]::Delete($pictures, $true) }
 if (Test-Path (Join-Path $out 'backgrounds')) { Copy-Item (Join-Path $out 'backgrounds') $pictures -Recurse -Force }
+# The same for the accessories sold in the shop (Assets\Accessories).
+$gear = Join-Path $app 'accessories'; if (Test-Path $gear) { [IO.Directory]::Delete($gear, $true) }
+if (Test-Path (Join-Path $out 'accessories')) { Copy-Item (Join-Path $out 'accessories') $gear -Recurse -Force }
 Write-Host "app\ updated: $((Get-Item (Join-Path $app 'KeyboardWorker.dll')).LastWriteTime)"

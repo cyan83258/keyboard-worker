@@ -27,5 +27,8 @@
   <!-- Backgrounds that come with the program: every PNG / JPG under Assets\Backgrounds is copied to "backgrounds" next to it.
        The file name is the title the AI chooses by (street_night.jpg -> "street night"); a subfolder is a group. -->
   <ItemGroup><Content Include="Assets\Backgrounds\**\*.png;Assets\Backgrounds\**\*.jpg;Assets\Backgrounds\**\*.jpeg" Link="backgrounds\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <!-- Accessories that come with the program and are sold in the shop: every PNG / JPG under Assets\Accessories (and accessories.json,
+       which places them) is copied to "accessories" next to it. See Model\ShopGear.cs for the file names and the list. -->
+  <ItemGroup><Content Include="Assets\Accessories\*.png;Assets\Accessories\*.jpg;Assets\Accessories\*.jpeg;Assets\Accessories\*.json" Link="accessories\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="Assets\pet.ico" LogicalName="KeyboardWorker.pet.ico" Condition="Exists('Assets\pet.ico')" /></ItemGroup>
 </Project>

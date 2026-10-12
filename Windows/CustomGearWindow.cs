@@ -38,6 +38,13 @@ public sealed class CustomGearWindow : Window
         behind.IsChecked = original.Behind; equip.IsChecked = item == null || game.State.Equipped.Values.Contains(item.Id); p.Children.Add(behind); p.Children.Add(equip);
         p.Children.Add(Pastel.Card(Pastel.Text("권장: 배경이 투명한 256×256 또는 512×512 PNG\nJPG/JPEG도 지원하지만 사각형 배경이 함께 표시됩니다. 장당 20MB 이하, 가로·세로 각각 4096px 이하입니다.\n장착 위치를 기준으로 그림의 중심을 놓습니다. 머리·얼굴·목 기준점은 꾸미기·설정에서 조절하며, 몸·오라는 캐릭터 중앙이 기준입니다. 전체 의상은 너비를 100%로 설정해 보세요.", 12), true));
         var footer = new StackPanel { Margin = new Thickness(20, 0, 20, 16) }; footer.Children.Add(status); footer.Children.Add(Pastel.Button("장비 저장", async () => await Save()));
+        // For whoever ships accessories with the program: the placement worked out here, as a line of accessories.json.
+        var copy = Pastel.Button("배치 값 복사", () =>
+        {
+            try { Clipboard.SetText(ShopGear.Describe(new CustomGear { Name = name.Text.Trim(), Slot = CustomGear.Slots[slot.SelectedIndex], WidthPercent = Number(width, 35), OffsetX = Number(x, 0), OffsetY = Number(y, 0), Rotation = Number(angle, 0), Behind = behind.IsChecked == true }, selectedPath.Length > 0 ? Path.GetFileName(selectedPath) : "파일이름.png")); status.Text = "복사했어요. 상점용 악세서리 목록(accessories.json)에 붙여 넣을 수 있어요."; }
+            catch (System.Runtime.InteropServices.ExternalException) { status.Text = "지금은 복사할 수 없어요. 다시 눌러 주세요."; }
+        }, true); copy.ToolTip = "지금 적힌 위치·크기를 프로그램에 함께 넣는 악세서리 목록(accessories.json)의 한 줄로 복사해요"; footer.Children.Add(copy);
+        static double Number(TextBox box, double fallback) => double.TryParse(box.Text, out double value) && double.IsFinite(value) ? value : fallback;
         var root = new DockPanel(); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer); root.Children.Add(Pastel.Scroll(p));
         Pastel.Window(this, "커스텀 장비", root, 660, 780); Closed += (_, _) => closed = true;
         Loaded += async (_, _) => { if (selectedPath.Length > 0) await PreviewFile(selectedPath); };

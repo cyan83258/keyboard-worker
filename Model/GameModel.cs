@@ -23,6 +23,8 @@ public sealed class GameState
     public HashSet<string> ClaimedQuests { get; set; } = new();
     public HashSet<string> Badges { get; set; } = new();
     public List<CustomGear> CustomItems { get; set; } = new();
+    // Everything that is drawn from a picture: the user's own gear and the accessories that came with the program.
+    [System.Text.Json.Serialization.JsonIgnore] public IEnumerable<CustomGear> Gear => CustomItems.Concat(ShopGear.Items);
     public bool Enabled { get; set; } = true;
     public bool ShowBadge { get; set; } = true;
     public bool ShowAccessories { get; set; } = true;
@@ -53,7 +55,7 @@ public sealed class GameState
         Owned ??= new(); Equipped ??= new(); ClaimedQuests ??= new(); Badges ??= new();
         CustomItems ??= new();
         CustomItems = CustomItems.Where(c => c != null && c.Id != null && c.Id.StartsWith("custom-", StringComparison.Ordinal) && CustomGear.Slots.Contains(c.Slot) && !string.IsNullOrWhiteSpace(c.ImagePath)).GroupBy(c => c.Id).Select(g => g.First().Normalized()).Take(50).ToList();
-        var catalog = PetGame.Items.Concat(CustomItems.Select(c => new ShopItem(c.Id, c.Name, c.Slot, 0, 1, "직접 등록한 장비"))).ToArray();
+        var catalog = PetGame.Items.Concat(ShopGear.Catalog).Concat(CustomItems.Select(c => new ShopItem(c.Id, c.Name, c.Slot, 0, 1, "직접 등록한 장비"))).ToArray();
         Owned.RemoveWhere(id => !catalog.Any(i => i.Id == id));
         foreach (var slot in Equipped.Keys.ToArray()) if (!catalog.Any(i => i.Id == Equipped[slot] && i.Slot == slot) || !Owned.Contains(Equipped[slot])) Equipped.Remove(slot);
         ClaimedQuests.RemoveWhere(id => !PetGame.Quests.Any(q => q.Id == id)); Badges.RemoveWhere(id => !PetGame.BadgeNames.ContainsKey(id));
@@ -98,7 +100,7 @@ public sealed class PetGame
     public long XpAtLevel => State.TotalXp - FloorXp(Level);
     public long NextXp => Level == 100 ? 0 : 50 + 25 * Level;
     public bool Dirty => dirty;
-    public ShopItem[] Catalog => Items.Concat(State.CustomItems.Select(c => new ShopItem(c.Id, c.Name, c.Slot, 0, 1, "직접 등록한 장비 · 무료"))).ToArray();
+    public ShopItem[] Catalog => Items.Concat(ShopGear.Catalog).Concat(State.CustomItems.Select(c => new ShopItem(c.Id, c.Name, c.Slot, 0, 1, "직접 등록한 장비 · 무료"))).ToArray();
     public PetGame(string? root = null)
     {
         path = Path.Combine(root ?? Storage.Root, "pet-game.json");

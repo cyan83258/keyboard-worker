@@ -27,7 +27,7 @@ public sealed class AccessoryLayer : FrameworkElement
         dc.PushTransform(new TranslateTransform(x, y));
         foreach (var pair in Outfit.Equipped)
         {
-            var custom = Outfit.CustomItems.Find(c => c.Id == pair.Value);
+            CustomGear? custom = null; foreach (var gear in Outfit.Gear) if (gear.Id == pair.Value) { custom = gear; break; }
             if (custom != null)
             {
                 if (custom.Behind != BackLayer) continue; var bitmap = CustomImage?.Invoke(custom.Id); if (bitmap == null) continue;
