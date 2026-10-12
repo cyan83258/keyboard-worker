@@ -222,11 +222,17 @@ public sealed class SettingsWindow : Window
         add("타이핑 소리", "MP3/WAV 소리 프리셋과 볼륨", () => Category("소리", soundPanel));
         add("음악 감지 · 뮤직플레이어", "브라우저 음악 감지 · 플레이어 표시 · 듣기 이미지", buddy.OpenMusicSettings);
 
-        var tools = Page("시스템", "시작 방식, 단축키, 프로그램별 예외, 백업과 저장 공간을 관리해요.");        var startCard = new StackPanel(); startCard.Children.Add(Pastel.Text("시작", 15));
-        var autostart = new CheckBox { Content = "Windows를 시작할 때 자동으로 실행하기", IsChecked = Autostart.IsOn() }; var autostartNote = Pastel.Text("", 12);
-        void DescribeAutostart() => autostartNote.Text = !Autostart.IsOn() ? "꺼져 있어요. 켜면 내 계정의 시작 프로그램에 등록합니다 (관리자 권한 불필요)." : Autostart.Elsewhere() ? "다른 위치의 Keyboard Worker가 등록돼 있어요: " + Autostart.Registered() + "\n체크를 껐다 켜면 지금 실행 중인 프로그램으로 바꿉니다." : "켜져 있어요. 다음 로그인부터 함께 시작합니다.";
+        var tools = Page("시스템", "시작 방식, 단축키, 프로그램별 예외, 백업과 저장 공간을 관리해요.");        // Starting with Windows: one line. What it means just now is said beside it, in full on hover.
+        var autostart = new CheckBox { Content = "Windows를 시작할 때 자동으로 실행하기", IsChecked = Autostart.IsOn(), VerticalAlignment = VerticalAlignment.Center };
+        var autostartNote = new TextBlock { Foreground = Pastel.Ink, Opacity = .75, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
+        void DescribeAutostart()
+        {
+            bool elsewhere = Autostart.IsOn() && Autostart.Elsewhere(); autostartNote.Text = !Autostart.IsOn() ? "꺼짐" : elsewhere ? "다른 위치의 프로그램이 등록돼 있어요 (껐다 켜면 바뀝니다)" : "켜짐 · 다음 로그인부터";
+            autostartNote.ToolTip = elsewhere ? "등록된 위치: " + Autostart.Registered() : "내 계정의 시작 프로그램에 등록합니다 (관리자 권한 불필요).";
+        }
         autostart.Click += (_, _) => { try { Autostart.Set(autostart.IsChecked == true); } catch (Exception e) { status.Text = "자동 실행을 바꾸지 못했습니다. " + e.Message; } autostart.IsChecked = Autostart.IsOn(); DescribeAutostart(); };
-        DescribeAutostart(); startCard.Children.Add(autostart); startCard.Children.Add(autostartNote); tools.Children.Add(Pastel.Card(startCard));
+        DescribeAutostart(); var startRow = new DockPanel(); DockPanel.SetDock(autostart, Dock.Left); startRow.Children.Add(autostart); startRow.Children.Add(autostartNote);
+        var startCard = Pastel.Card(startRow); startCard.Padding = new Thickness(14, 7, 14, 7); tools.Children.Add(startCard);
         tools.Children.Add(Pastel.Card(new UpdatePanel(buddy, this), true));
         add = Section(tools, "단축키와 예외");
         add("단축키 안내", "지금 쓰는 조합과 사용 방법", buddy.OpenShortcutGuide);
@@ -241,6 +247,14 @@ public sealed class SettingsWindow : Window
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(ErrorLog.FilePath) { UseShellExecute = true })?.Dispose(); } catch (Exception e) { status.Text = "기록 파일을 열지 못했습니다. " + e.Message; }
         });
         add("사용 설명서", "기능별 안내 읽기 · 찾기 · 첫 실행 안내 다시 보기", buddy.OpenGuide);
+        // At the very bottom, apart from everything else: back to how the program was first installed. Asked twice.
+        var reset = Pastel.Button("전체 초기화…", () =>
+        {
+            if (MessageBox.Show(this, "모든 설정과 기록을 지우고 처음 설치한 상태로 되돌릴까요?\n\n캐릭터 프로필과 프리셋, 이미지·소리·글꼴, 대화 기록, 친밀도·코인·수집품, AI 연결과 API 키, 추가 모드, 자동 백업까지 모두 지워집니다.\n남기고 싶은 것이 있으면 먼저 '설정 백업'으로 내보내 주세요.", "전체 초기화 (1/2)", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+            if (MessageBox.Show(this, "정말로 초기화할까요? 되돌릴 수 없습니다.\n'예'를 누르면 프로그램이 다시 시작되면서 모든 것이 지워집니다.", "전체 초기화 (2/2)", MessageBoxButton.YesNo, MessageBoxImage.Stop, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+            try { if (Autostart.IsOn()) Autostart.Set(false); FactoryReset.Stage(); buddy.Restart(); } catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException) { status.Text = "초기화를 시작하지 못했습니다. " + e.Message; }
+        }, true);
+        reset.HorizontalAlignment = HorizontalAlignment.Left; reset.Margin = new Thickness(0, 26, 0, 4); reset.Opacity = .8; reset.ToolTip = "모든 설정과 기록을 지우고 처음 상태로 되돌려요 (두 번 물어봅니다)"; tools.Children.Add(reset);
         var extra = Page("추가 모드", "직접 만들거나 받은 모드 파일을 넣고, 켜고 끄고, 지워요.");
         extra.Children.Add(new ModsPanel(buddy, this, text => status.Text = text));
 

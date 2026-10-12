@@ -34,7 +34,8 @@ public sealed class MessengerWindow : Window
         var bottom = new StackPanel { Margin = new Thickness(0, 10, 0, 0) }; DockPanel.SetDock(bottom, Dock.Bottom); frame.Root.Children.Add(bottom);
         var entry = PageFrame.Entry(async () => await Say(), () => request?.Cancel(), () => busy, 6000); input = entry.Input; send = entry.Send;
         var smile = Pastel.Button("☺", () => { }, true); smile.Padding = new Thickness(11, 4, 11, 6); smile.FontSize = 17; smile.Margin = new Thickness(6, 0, 0, 0); smile.VerticalAlignment = VerticalAlignment.Bottom; smile.ToolTip = "이모티콘 넣기";
-        var picker = Emoji(smile); smile.Click += (_, _) => picker.IsOpen = !picker.IsOpen;
+        var picker = Emoji(smile); smile.Click += (_, _) => { if (!picker.IsOpen) Stickers(); picker.IsOpen = !picker.IsOpen; };
+        view.StickerPath = title => buddy.Stage.Sticker(title)?.Path;
         DockPanel.SetDock(smile, Dock.Right); entry.Row.Children.Add(smile); entry.Row.Children.Add(input); bottom.Children.Add(entry.Row); status.Margin = new Thickness(2, 6, 0, 0); bottom.Children.Add(status);
         frame.Root.Children.Add(new Border { Child = view, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.5, 1.5, 3, 3.5), CornerRadius = new CornerRadius(12), ClipToBounds = true });
         view.Edit += Edit; view.Delete += Delete; view.Again += async () => await Again(); view.IsKept = turn => buddy.StageClips.Has(Thread, turn);
@@ -52,7 +53,20 @@ public sealed class MessengerWindow : Window
         Loaded += (_, _) => input.Focus();
     }
     public void Select(string id) { foreach (Choice choice in who.Items) if (choice.Character.Id == id) { who.SelectedItem = choice; return; } }
-    // A small board of picture characters over the button; a click puts one where the caret is.
+    // The user's own emoticons on the picker, as they are now; a click sends one as a message of its own.
+    readonly WrapPanel mine = new() { Width = 8 * 38, Margin = new Thickness(0, 0, 0, 6) }; Popup? board;
+    void Stickers()
+    {
+        mine.Children.Clear();
+        foreach (var sticker in buddy.Stage.State.Stickers)
+        {
+            var key = new Button { Content = StageParts.Picture(sticker.Path, 64), Padding = new Thickness(3), Margin = new Thickness(0, 0, 4, 4), ToolTip = sticker.Title, Cursor = System.Windows.Input.Cursors.Hand }; Pastel.Ghost(key);
+            key.Click += async (_, _) => { if (board != null) board.IsOpen = false; await Talk(StageSticker.Mark(sticker.Title)); };
+            mine.Children.Add(key);
+        }
+        if (mine.Children.Count == 0) mine.Children.Add(new TextBlock { Text = "내 그림 이모티콘은 아래 '이모티콘 관리'에서 넣어요.", Foreground = Pastel.Ink, Opacity = .75, FontSize = 12, TextWrapping = TextWrapping.Wrap, Width = 8 * 38 - 8 });
+    }
+    // The picker over the button: the user's own emoticons (sent at once), then picture characters (put where the caret is).
     Popup Emoji(Button anchor)
     {
         var board = new WrapPanel { Width = 8 * 38 };
@@ -62,7 +76,9 @@ public sealed class MessengerWindow : Window
             key.Click += (_, _) => { int at = input.SelectionStart; input.SelectedText = one; input.SelectionLength = 0; input.SelectionStart = at + one.Length; input.Focus(); };
             board.Children.Add(key);
         }
-        return new Popup { Child = new Border { Child = board, Background = Pastel.Paper, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.5, 1.5, 3, 3), CornerRadius = new CornerRadius(12), Padding = new Thickness(8) }, PlacementTarget = anchor, Placement = PlacementMode.Top, StaysOpen = false, AllowsTransparency = true, VerticalOffset = -6 };
+        var manage = Pastel.Button("이모티콘 관리…", () => { this.board!.IsOpen = false; new StickerWindow(buddy) { Owner = this, ShowInTaskbar = false }.ShowDialog(); Reload(); }, true); manage.FontSize = 12; manage.HorizontalAlignment = HorizontalAlignment.Left; manage.Margin = new Thickness(0, 6, 0, 0);
+        var all = new StackPanel(); all.Children.Add(new ScrollViewer { Content = mine, MaxHeight = 230, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }); all.Children.Add(board); all.Children.Add(manage);
+        return this.board = new Popup { Child = new Border { Child = all, Background = Pastel.Paper, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.5, 1.5, 3, 3), CornerRadius = new CornerRadius(12), Padding = new Thickness(8) }, PlacementTarget = anchor, Placement = PlacementMode.Top, StaysOpen = false, AllowsTransparency = true, VerticalOffset = -6 };
     }
     // Switching to a character, a mode or a room: its own thread of messages.
     void Enter()

@@ -53,10 +53,17 @@ public sealed class MessengerView : Grid
     // A message made only of picture characters is drawn large, like a sticker.
     static bool Sticker(string text) => text.Length is > 0 and <= 12 && StageTalk.HasEmoji(text) && text.All(c => char.IsSurrogate(c) || char.IsWhiteSpace(c) || (c >= 0x2600 && c <= 0x27BF) || c == 0xFE0F || c == 0x200D);
     TextBox Words(string text, bool large) => new() { Text = text, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(0), Background = Brushes.Transparent, Foreground = Pastel.Ink, FontFamily = font, FontSize = large ? size * 2.2 : size, Padding = new Thickness(0) };
-    Border Bubble(string text, bool mine, List<TextBox>? boxes = null)
+    // Where the picture of an emoticon with this title is (null = there is none, and the message is shown as it was written).
+    public Func<string, string?> StickerPath { get; set; } = _ => null;
+    FrameworkElement Bubble(string text, bool mine, List<TextBox>? boxes = null)
     {
+        // "[이모티콘: 제목]" alone is the user's (or the character's) picture emoticon: shown as the picture, without a bubble.
+        if (StageSticker.Named(text) is { } title && StickerPath(title) is { } file)
+        {
+            var sticker = StageParts.Picture(file, 112); sticker.Margin = new Thickness(4, 4, 4, 4); sticker.HorizontalAlignment = mine ? HorizontalAlignment.Right : HorizontalAlignment.Left; sticker.ToolTip = title; return sticker;
+        }
         var words = Words(text, Sticker(text)); boxes?.Add(words);
-        return new()
+        return new Border
         {
             Child = words, Background = mine ? Pastel.Pink : Pastel.CardBlue, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.2, 1.2, 2, 2.4), CornerRadius = mine ? new CornerRadius(14, 14, 3, 14) : new CornerRadius(14, 14, 14, 3),
             Padding = new Thickness(12, 7, 12, 8), Margin = new Thickness(mine ? 90 : 0, 3, mine ? 0 : 90, 3), HorizontalAlignment = mine ? HorizontalAlignment.Right : HorizontalAlignment.Left

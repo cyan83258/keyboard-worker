@@ -28,6 +28,7 @@ public static class Program
         // A restart (after staging a settings import) waits for the previous instance to finish saving and exit.
         if (!first && args.Contains("--restart")) { try { first = mutex.WaitOne(20000); } catch (AbandonedMutexException) { first = true; } }
         if (!first) { MessageBox.Show("이미 실행 중입니다. 시스템 트레이의 Keyboard Worker 아이콘을 확인하세요."); return; }
+        if (FactoryReset.ApplyPending() is string resetError) { ErrorLog.Write("전체 초기화 실패", resetError); MessageBox.Show("일부 파일을 지우지 못했습니다.\n" + resetError, "Keyboard Worker"); }
         if (SettingsBackup.ApplyPending() is string importError) { ErrorLog.Write("설정 가져오기 실패", importError); MessageBox.Show("설정 백업을 가져오지 못해 기존 설정으로 시작합니다.\n" + importError, "Keyboard Worker"); }
 
         var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };

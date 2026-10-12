@@ -118,6 +118,7 @@ public sealed partial class Buddy
         artView.Close(); pageView.Close();
         var textView = new MessengerWindow(this); textView.Show(); textView.UpdateLayout(); Pastel.Capture(textView, Path.Combine(shots, "ui-messenger.png"));
         var textSettings = new StageSettingsWindow(this, StageCharacters()[0], true); textSettings.Show(); textSettings.UpdateLayout(); Pastel.Capture(textSettings, Path.Combine(shots, "ui-messenger-settings.png")); textSettings.Close(); textView.Close();
+        var stickerView = new StickerWindow(this); stickerView.Show(); stickerView.UpdateLayout(); Pastel.Capture(stickerView, Path.Combine(shots, "ui-stickers.png")); stickerView.Close();
         var roomView = new StageRoomWindow(this, StageModeNow.Thread(StageCharacters()[0].Id), StageCharacters()[0].Name); roomView.Show(); roomView.UpdateLayout(); Pastel.Capture(roomView, Path.Combine(shots, "ui-stage-room.png")); roomView.Close();
         foreach (bool keptView in new[] { false, true }) { var historyView = new StageHistoryWindow(this, StageCharacters()[0].Id, keptView); historyView.Show(); historyView.UpdateLayout(); Pastel.Capture(historyView, Path.Combine(shots, keptView ? "ui-stage-clips.png" : "ui-stage-history.png")); historyView.Close(); }
         // The two surfaces with a made-up answer: stage directions apart from the speech, a long answer in pages, and text messages.

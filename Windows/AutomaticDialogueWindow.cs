@@ -34,16 +34,19 @@ public sealed class AutomaticDialogueWindow : Window
         settings.Children.Add(Pastel.Text("재촉 시점·반복 간격은 대사·재촉 설정을 따릅니다. 두 기능은 기본 꺼짐입니다. 켜면 선택한 AI 연결로 자동 요청하며 API 사용량이 발생합니다. 채팅 기록에는 자동 대사를 저장하지 않습니다. 대사는 최대 600자이며, 생각하는 모델도 끝까지 답할 수 있게 출력 여유를 넉넉히 두되 실제 사용한 토큰만 집계합니다. 실패하면 5분간 자동 호출을 쉬고, 요청 하나의 대기 시간은 최대 45초입니다.", 12));
         settings.Children.Add(Pastel.Text("휴식·조용한 모드·숨김·앱별 재촉 제외 중에는 멈춥니다. 채팅과 표시 중인 말풍선을 우선하며, 직접 메시지를 보내면 자동 생성은 중단합니다. 입력 문자열이나 화면은 보내지 않습니다.", 12));
         settings.Children.Insert(2, AutomaticStatusCard.Build(this, buddy, "랜덤 한마디 지금 한 번 말해보기", false));
-        var defaults = new PromptTemplates();
+        // The five prompts on one tab, each folded under its name until it is wanted.
+        var defaults = new PromptTemplates(); var all = Tab("프롬프트");
+        all.Children.Add(Pastel.Text("이름을 누르면 펼쳐져요. 프롬프트는 현재 캐릭터 프로필과 적용 중인 프리셋에 저장됩니다.", 12));
         void Editor(string key, string title, string help)
         {
-            var p = Tab(title); p.Children.Add(Pastel.Text(help, 12));
+            var p = new StackPanel { Margin = new Thickness(6, 0, 0, 8) }; p.Children.Add(Pastel.Text(help, 12));
             var property = typeof(PromptTemplates).GetProperty(key)!;
-            var box = new TextBox { Text = (string)property.GetValue(templates)!, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 330, MaxLength = 10000, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            var box = new TextBox { Text = (string)property.GetValue(templates)!, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 300, MaxLength = 10000, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             prompts[key] = box;
-            p.Children.Add(box);
-            p.Children.Add(Pastel.Button("이 프롬프트 기본값 복원", () => box.Text = (string)property.GetValue(defaults)!, true));
-            p.Children.Add(Pastel.Button("실제 조합된 프롬프트 보기", () => Preview(key), true));
+            p.Children.Add(box); var buttons = new WrapPanel();
+            buttons.Children.Add(Pastel.Button("기본값 복원", () => box.Text = (string)property.GetValue(defaults)!, true));
+            buttons.Children.Add(Pastel.Button("실제 조합된 프롬프트 보기", () => Preview(key), true)); p.Children.Add(buttons);
+            var heading = StageParts.Fold(title, p, true, _ => { }); heading.Margin = new Thickness(0, 6, 0, 2); all.Children.Add(heading); all.Children.Add(p);
         }
         Editor("Nudge", "AI 재촉", "프로필과 채팅 진행 규칙을 공통으로 전달하고 아래 재촉 지시를 추가합니다. {idle_seconds}: 입력이 없었던 초 · {last_line}: 직전 자동 대사");
         Editor("Random", "랜덤 한마디", "프로필과 채팅 진행 규칙을 공통으로 전달하고 아래 지시를 추가합니다. {last_line}: 직전 자동 대사");

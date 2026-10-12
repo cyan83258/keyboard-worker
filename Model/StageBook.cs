@@ -20,6 +20,18 @@ public sealed class StageBackdrop
     public string Group { get; set; } = "";
     public StageBackdrop Snapshot() => (StageBackdrop)MemberwiseClone();
 }
+// A picture the user sends in text messages, like a messenger's stickers. The AI knows it by its title only.
+public sealed class StageSticker
+{
+    public string Title { get; set; } = "";
+    public string Path { get; set; } = "";
+    public StageSticker Snapshot() => (StageSticker)MemberwiseClone();
+    // How a sticker is written in a message: a line of its own, "[이모티콘: 제목]".
+    public static string Mark(string title) => "[이모티콘: " + title + "]";
+    static readonly System.Text.RegularExpressions.Regex mark = new(@"^\s*\[이모티콘\s*[:：]\s*([^\]\r\n]{1,40})\]\s*$", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+    // The title when a message is a sticker and nothing else; null otherwise.
+    public static string? Named(string message) => mark.Match(message) is { Success: true } match && match.Groups[1].Value.Trim() is { Length: > 0 } title ? title : null;
+}
 // One character's standing pictures.
 public sealed class StageSet
 {
@@ -42,13 +54,21 @@ public sealed class StageState
     public StageTalkOptions Texting { get; set; } = StageTalkOptions.Texting();   // the same for text messages, which share nothing with the pages
     public string TextMode { get; set; } = "";
     public string TextBackdrop { get; set; } = "";               // the picture behind the text messages; empty = plain
-    public StageState Snapshot() => new() { Talk = Talk.Snapshot(), Mode = Mode, Texting = Texting.Snapshot(), TextMode = TextMode, TextBackdrop = TextBackdrop, Sets = (Sets ?? new()).ToDictionary(p => p.Key, p => p.Value.Snapshot()), Backdrops = Backdrops.Select(b => b.Snapshot()).ToList(), Backdrop = Backdrop, AutoBackdrop = AutoBackdrop, FoldSprites = FoldSprites, FoldBackdrops = FoldBackdrops };
+    public List<StageSticker> Stickers { get; set; } = new();    // the user's own emoticons for text messages, in the order they are offered
+    public StageState Snapshot() => new() { Talk = Talk.Snapshot(), Mode = Mode, Texting = Texting.Snapshot(), TextMode = TextMode, TextBackdrop = TextBackdrop, Stickers = Stickers.Select(s => s.Snapshot()).ToList(), Sets = (Sets ?? new()).ToDictionary(p => p.Key, p => p.Value.Snapshot()), Backdrops = Backdrops.Select(b => b.Snapshot()).ToList(), Backdrop = Backdrop, AutoBackdrop = AutoBackdrop, FoldSprites = FoldSprites, FoldBackdrops = FoldBackdrops };
 }
 
 // The pictures of the character pages (stage.json). The files themselves are copies in the images folder.
 public sealed class StageBook
 {
-    public const int MaxSprites = 40, MaxBackdrops = 60;
+    public const int MaxSprites = 40, MaxBackdrops = 60, MaxStickers = 80;
+    public void AddSticker(string title, string file)
+    {
+        if (State.Stickers.Count >= MaxStickers) throw new InvalidOperationException("이모티콘은 " + MaxStickers + "개까지 등록할 수 있어요.");
+        State.Stickers.Add(new StageSticker { Title = title, Path = file }); Save();
+    }
+    // The sticker a message names; with several of one title, the first.
+    public StageSticker? Sticker(string title) => State.Stickers.FirstOrDefault(s => string.Equals(s.Title, title.Trim(), StringComparison.OrdinalIgnoreCase));
     public const string BuiltInGroup = "기본 제공";
     // Backgrounds that come with the program: the pictures in the "backgrounds" folder next to it. A picture's file name is
     // its title ("street_night.jpg" -> "street night") and a subfolder is its group. They are listed after the user's own
@@ -106,6 +126,8 @@ public sealed class StageBook
         // A built-in background is still the same picture after the program folder moved (another install, an update elsewhere).
         if (state.Backdrops.Concat(BuiltIn).All(b => !string.Equals(b.Path, state.Backdrop ?? "", StringComparison.OrdinalIgnoreCase)))
             state.Backdrop = string.IsNullOrEmpty(state.Backdrop) ? "" : BuiltIn.FirstOrDefault(b => string.Equals(Path.GetFileName(b.Path), Path.GetFileName(state.Backdrop), StringComparison.OrdinalIgnoreCase))?.Path ?? "";
+        state.Stickers = (state.Stickers ?? new()).Where(s => s != null && !string.IsNullOrWhiteSpace(s.Path) && !SafeFiles.IsNetworkPath(s.Path)).DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase).Take(MaxStickers).ToList();
+        foreach (var sticker in state.Stickers) sticker.Title = StageTags.Clean(sticker.Title, "이모티콘");
         state.Talk.Normalize(); state.Texting.Normalize(StageTalkOptions.StandardTextPrompt);
     }
     public StageSet Set(string id) { if (!Sets.TryGetValue(id, out var set)) Sets[id] = set = new(); return set; }
@@ -137,5 +159,5 @@ public sealed class StageBook
     public void Save() { Fit(State); OrderedStore.SaveJson(path, State.Snapshot()); Changed?.Invoke(); }
     // Every file a page uses, so that tidying up never takes one away.
     public static IEnumerable<string> Files(StageState? state) =>
-        state == null ? Array.Empty<string>() : (state.Sets ?? new()).Values.Where(s => s != null).SelectMany(s => (s.Sprites ?? new()).Where(p => p != null).Select(p => p.Path)).Concat((state.Backdrops ?? new()).Where(b => b != null).Select(b => b.Path)).Concat(string.IsNullOrEmpty(state.TextBackdrop) ? Array.Empty<string>() : new[] { state.TextBackdrop });
+        state == null ? Array.Empty<string>() : (state.Sets ?? new()).Values.Where(s => s != null).SelectMany(s => (s.Sprites ?? new()).Where(p => p != null).Select(p => p.Path)).Concat((state.Backdrops ?? new()).Where(b => b != null).Select(b => b.Path)).Concat(string.IsNullOrEmpty(state.TextBackdrop) ? Array.Empty<string>() : new[] { state.TextBackdrop }).Concat((state.Stickers ?? new()).Where(s => s != null).Select(s => s.Path));
 }

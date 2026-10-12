@@ -62,7 +62,7 @@ public sealed partial class Buddy
             string state = Adventure.Context(id, who.Name) + (onScreen ? Feelings(id != CharacterId) : Affection.Context(Adventure.Friend(id, who.Name).Bond)) + await Surroundings(null);
             // The backgrounds are only offered when the user lets the character change them.
             var backdrops = Stage.State.AutoBackdrop ? Stage.Backdrops.Select(b => b.Title).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() : Array.Empty<string>();
-            var scene = new StageScene(StageTags.Names(Stage.Set(id).Sprites), backdrops, Stage.CurrentTitle, all.Select(c => c.Name).Where(n => n != who.Name).Distinct().ToArray(), note);
+            var scene = new StageScene(StageTags.Names(Stage.Set(id).Sprites), backdrops, Stage.CurrentTitle, all.Select(c => c.Name).Where(n => n != who.Name).Distinct().ToArray(), note, mode.Layout == StageMode.Messenger ? Stage.State.Stickers.Select(s => s.Title).ToArray() : null);
             string key = mode.Thread(id); var room = Rooms.Current(key); string thread = StageRooms.Thread(key, room); StageTalks.Limit = options.KeepTurns;   // the pages and the text messages each keep as much as they were told to
             var reply = await StageTalk.Send(StageTalks, Chat.Preferences, who.Persona, thread, text, state + room.Context(), scene, options, mode, request.Token, streaming ? pump.Report : null);
             if (!closing) { ProgressCount("chats"); RememberQuietly(thread, room); }

@@ -20,6 +20,15 @@ public static class StageAssets
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(picture)); using (var file = File.Create(target)) encoder.Save(file);
         return target;
     }
+    // An emoticon for text messages is shown small, so it is stored small: a PNG (its transparency kept) of at most StickerSide.
+    public const int StickerSide = 320;
+    public static string ImportSticker(string source, string root)
+    {
+        ImageAssets.Validate(source); BitmapSource picture = new FormatConvertedBitmap(ImageAssets.Read(source, StickerSide), PixelFormats.Bgra32, null, 0);
+        string target = Path.Combine(Folder(root), Guid.NewGuid().ToString("N") + ".png");
+        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(picture)); using (var file = File.Create(target)) encoder.Save(file);
+        return target;
+    }
     // A background has no transparency worth keeping, so it is stored as JPEG: a fraction of the size.
     public static string ImportBackground(string source, string root)
     {

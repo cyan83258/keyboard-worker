@@ -75,10 +75,25 @@ public static class RoomTests
         Check(StageTalk.HasEmoji("그래 ❤") && StageTalk.HasEmoji("😊") && StageTalk.HasEmoji("☀") && !StageTalk.HasEmoji("ㅋㅋ ^^ ;; …♡") && !StageTalk.HasEmoji(""), "Picture characters are told from letters and plain marks");
         string open = StageTalk.TextRules(true, noTurns), strict = StageTalk.TextRules(false, plainLast);
         Check(open.Contains("서로 다른 곳") && open.Contains("쓰다듬기") && open.Contains("찾아가거나") && open.Contains("어울릴 때만") && strict.Contains("문자 전용 표현은 쓰지 않습니다") && !strict.Contains("어울릴 때만"), "Text messages know they are text: no touching, no turning up; texting slang as the user chose");
-        Check(!open.Contains("이번 답장에는 이모티콘을 하나도") && !strict.Contains("이번 답장에는 이모티콘을 하나도") && StageTalk.TextRules(true, emojiLast).Contains("이번 답장에는 이모티콘을 하나도") && open.Contains("따라 붙이지 않고"), "An answer with emoji is followed by one without, so they do not become a habit");
+        Check(!open.Contains("바로 앞 답장에 이모티콘을 썼습니다") && !strict.Contains("바로 앞 답장에 이모티콘을 썼습니다") && StageTalk.TextRules(true, emojiLast).Contains("바로 앞 답장에 이모티콘을 썼습니다") && open.Contains("따라 붙이지 않고"), "An answer with emoji is followed by one without, so they do not become a habit");
         var keepFew = new StageTalkOptions { KeepTurns = 5 }; keepFew.Normalize(); Check(keepFew.KeepTurns == 30 && StageLog.Limits.Contains(30) && StageLog.Limits.Contains(50) && StageTalkOptions.Texting().Slang, "Thirty and fifty exchanges can be chosen as the limit");
         var withPicture = new StageState { TextBackdrop = @"C:\somewhere\texting.jpg" };
         Check(StageBook.Files(withPicture).Contains(@"C:\somewhere\texting.jpg") && withPicture.Snapshot().TextBackdrop == withPicture.TextBackdrop && !StageBook.Files(new StageState()).Any(), "The picture behind the text messages counts as a file in use");
+
+        // ---- the user's own emoticons ----
+        Check(StageSticker.Mark("엄지척") == "[이모티콘: 엄지척]" && StageSticker.Named("[이모티콘: 엄지척]") == "엄지척" && StageSticker.Named("  [이모티콘：울먹이는 고양이] ") == "울먹이는 고양이" && StageSticker.Named("좋아 [이모티콘: 엄지척]") == null && StageSticker.Named("[이모티콘: ]") == null && StageSticker.Named("그냥 말") == null, "A message that is an emoticon and nothing else is told by its title");
+        var stickerBook = new StageBook(Path.Combine(home, "stickers"), Path.Combine(home, "nothing-here"));
+        stickerBook.AddSticker("엄지척", Path.Combine(home, "a.png")); stickerBook.AddSticker("  울먹이는 [고양이]  ", Path.Combine(home, "b.png")); stickerBook.AddSticker("", Path.Combine(home, "c.png"));
+        Check(stickerBook.State.Stickers.Select(s => s.Title).SequenceEqual(new[] { "엄지척", "울먹이는 고양이", "이모티콘" }) && stickerBook.Sticker(" 엄지척 ")?.Path.EndsWith("a.png") == true && stickerBook.Sticker("없는 것") == null && StageBook.Files(stickerBook.State).Count(f => f.EndsWith(".png")) == 3, "Emoticons are kept in order with clean titles, found by title, and count as files in use");
+        var lastSticker = stickerBook.State.Stickers[2]; stickerBook.State.Stickers.RemoveAt(2); stickerBook.State.Stickers.Insert(0, lastSticker); stickerBook.Save(); OrderedStore.FlushAsync().GetAwaiter().GetResult();
+        Check(new StageBook(Path.Combine(home, "stickers"), Path.Combine(home, "nothing-here")).State.Stickers.Select(s => s.Title).SequenceEqual(new[] { "이모티콘", "엄지척", "울먹이는 고양이" }), "Their order is saved");
+        string withStickers = StageTalk.TextRules(true, noTurns, new[] { "엄지척", "울먹이는 고양이" }), withoutStickers = StageTalk.TextRules(true, noTurns);
+        Check(withStickers.Contains("제목은 다음 중에서만 고릅니다: 엄지척, 울먹이는 고양이") && withStickers.Contains("제목이 말하는 감정") && withoutStickers.Contains("그림 이모티콘을 보낼 수 없습니다") && StageTalk.TextRules(true, new[] { new ChatTurn("ㅎㅇ", "왔군.\n[이모티콘: 엄지척]", DateTimeOffset.Now, "루카") }, new[] { "엄지척" }).Contains("그림 이모티콘도 하나도"), "The model knows an emoticon by its title, may send one of the user's, and not twice running");
+
+        // ---- back to how it was first installed ----
+        string resetHome = Path.Combine(home, "reset"); Directory.CreateDirectory(Path.Combine(resetHome, "images")); File.WriteAllText(Path.Combine(resetHome, "settings.json"), "{}"); File.WriteAllText(Path.Combine(resetHome, "images", "a.png"), "x");
+        Check(FactoryReset.ApplyPending(resetHome) == null && File.Exists(Path.Combine(resetHome, "settings.json")), "Nothing is erased unless a reset was staged");
+        FactoryReset.Stage(resetHome); Check(File.Exists(Path.Combine(resetHome, "settings.json")) && FactoryReset.ApplyPending(resetHome) == null && Directory.Exists(resetHome) && !Directory.EnumerateFileSystemEntries(resetHome).Any() && FactoryReset.ApplyPending(resetHome) == null, "A staged reset empties the settings folder at the next start, once");
 
         // ---- memory ----
         var day = new DateTimeOffset(2026, 5, 1, 9, 0, 0, TimeSpan.Zero); var room = new StageRoom();

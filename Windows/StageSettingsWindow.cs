@@ -61,6 +61,13 @@ static class StageParts
         if (thumbnails.TryGetValue(key, out var known)) image.Source = known; else _ = Decode(frame, image, path, side, key);
         return frame;
     }
+    // A small picture on its own, with nothing drawn around it (an emoticon in a message or on the picker); decoded and kept the same way.
+    public static Image Picture(string path, double side)
+    {
+        var image = new Image { Width = side, Height = side, Stretch = Stretch.Uniform }; int pixels = (int)side * 2; string key = pixels + "|" + path;
+        if (thumbnails.TryGetValue(key, out var known)) image.Source = known; else _ = Decode(new Border(), image, path, pixels, key);
+        return image;
+    }
     static readonly Dictionary<string, BitmapSource> thumbnails = new(StringComparer.OrdinalIgnoreCase); static readonly SemaphoreSlim decoding = new(2);
     static async Task Decode(Border frame, Image image, string path, int side, string key)
     {
