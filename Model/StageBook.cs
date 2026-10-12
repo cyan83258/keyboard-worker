@@ -38,8 +38,10 @@ public sealed class StageState
     public bool FoldSprites { get; set; }                         // the lists in the picture window are folded away
     public bool FoldBackdrops { get; set; }
     public StageTalkOptions Talk { get; set; } = new();          // length, room and prompt of the talks on the pages
-    public string Mode { get; set; } = "";                       // the page mode in use (see StageMode)
-    public StageState Snapshot() => new() { Talk = Talk.Snapshot(), Mode = Mode, Sets = (Sets ?? new()).ToDictionary(p => p.Key, p => p.Value.Snapshot()), Backdrops = Backdrops.Select(b => b.Snapshot()).ToList(), Backdrop = Backdrop, AutoBackdrop = AutoBackdrop, FoldSprites = FoldSprites, FoldBackdrops = FoldBackdrops };
+    public string Mode { get; set; } = "";                       // the mode of the character page, when a mod added one (see StageMode)
+    public StageTalkOptions Texting { get; set; } = StageTalkOptions.Texting();   // the same for text messages, which share nothing with the pages
+    public string TextMode { get; set; } = "";
+    public StageState Snapshot() => new() { Talk = Talk.Snapshot(), Mode = Mode, Texting = Texting.Snapshot(), TextMode = TextMode, Sets = (Sets ?? new()).ToDictionary(p => p.Key, p => p.Value.Snapshot()), Backdrops = Backdrops.Select(b => b.Snapshot()).ToList(), Backdrop = Backdrop, AutoBackdrop = AutoBackdrop, FoldSprites = FoldSprites, FoldBackdrops = FoldBackdrops };
 }
 
 // The pictures of the character pages (stage.json). The files themselves are copies in the images folder.
@@ -81,7 +83,7 @@ public sealed class StageBook
         string file = Path.Combine(root, "stage.json"); var state = Storage.ReadJson<StageState>(file, 4 * 1024 * 1024) ?? new();
         // The first version of the file was just the sets, each with its own backgrounds.
         if (state.Sets == null && File.Exists(file)) state.Sets = Storage.ReadJson<Dictionary<string, StageSet>>(file, 4 * 1024 * 1024);
-        state.Sets ??= new(); state.Backdrops ??= new(); state.Talk ??= new(); state.Talk.Normalize(); state.Mode ??= "";
+        state.Sets ??= new(); state.Backdrops ??= new(); state.Talk ??= new(); state.Mode ??= ""; state.Texting ??= StageTalkOptions.Texting(); state.TextMode ??= "";
         foreach (var key in state.Sets.Keys.ToArray()) if (state.Sets[key] == null) state.Sets.Remove(key);
         foreach (var set in state.Sets.Values)
         {
@@ -103,7 +105,7 @@ public sealed class StageBook
         // A built-in background is still the same picture after the program folder moved (another install, an update elsewhere).
         if (state.Backdrops.Concat(BuiltIn).All(b => !string.Equals(b.Path, state.Backdrop ?? "", StringComparison.OrdinalIgnoreCase)))
             state.Backdrop = string.IsNullOrEmpty(state.Backdrop) ? "" : BuiltIn.FirstOrDefault(b => string.Equals(Path.GetFileName(b.Path), Path.GetFileName(state.Backdrop), StringComparison.OrdinalIgnoreCase))?.Path ?? "";
-        state.Talk.Normalize();
+        state.Talk.Normalize(); state.Texting.Normalize(StageTalkOptions.StandardTextPrompt);
     }
     public StageSet Set(string id) { if (!Sets.TryGetValue(id, out var set)) Sets[id] = set = new(); return set; }
     public void AddSprite(string id, string tag, string file)

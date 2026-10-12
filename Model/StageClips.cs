@@ -55,23 +55,35 @@ public sealed class StageClips
     }
 }
 
-// A page talk as a file that can be read back in (JSON), for moving it to another PC or keeping it outside the program.
+// A page talk as a file that can be read back in (JSON), for moving it to another PC or keeping it outside the program:
+// the exchanges alone, or a whole chat room with its name, author's note and memory.
 public static class StageArchive
 {
     public const string Format = "keyboard-worker-talk";
     public const int MaxTurns = 5000;
-    sealed record Package(string Format, int Version, string Title, ChatTurn[] Turns);
+    // Kind, Room, Note and Summary are only in the file of a whole room.
+    sealed record Package(string Format, int Version, string Title, ChatTurn[] Turns, string? Kind = null, string? Room = null, string? Note = null, string? Summary = null);
+    public sealed record RoomFile(string Kind, string Name, string Note, string Summary, ChatTurn[] Turns);
     static readonly JsonSerializerOptions options = new() { WriteIndented = true, PropertyNameCaseInsensitive = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     public static string Write(string title, IEnumerable<ChatTurn> turns) => JsonSerializer.Serialize(new Package(Format, 1, title, turns.ToArray()), options);
-    // Throws InvalidOperationException, with a message for the user, when the text is not such a file.
-    public static ChatTurn[] Read(string json)
+    // kind: which kind of page the room is from (StageMode.Kind), so that it is not read into another kind.
+    public static string WriteRoom(string kind, string title, StageRoom room, IEnumerable<ChatTurn> turns) => JsonSerializer.Serialize(new Package(Format, 2, title, turns.ToArray(), kind, room.Name, room.Note, room.Summary), options);
+    // Both throw InvalidOperationException, with a message for the user, when the text is not such a file.
+    public static ChatTurn[] Read(string json) => Turns(Open(json)) is { Length: > 0 } turns ? turns : throw new InvalidOperationException("파일에 대화가 들어 있지 않습니다.");
+    // A room may be empty of talk (only a note); a plain talk file is read as a room without note or memory.
+    public static RoomFile ReadRoom(string json)
+    {
+        var package = Open(json);
+        return new(package.Kind ?? "", SafeFiles.OneLine(package.Room ?? package.Title, 24) is { Length: > 0 } name ? name : "불러온 방", package.Note ?? "", package.Summary ?? "", Turns(package));
+    }
+    static Package Open(string json)
     {
         Package? package;
         try { package = JsonSerializer.Deserialize<Package>(json, options); }
         catch (JsonException) { throw new InvalidOperationException("대화 파일의 형식이 올바르지 않습니다."); }
-        if (package == null || package.Format != Format || package.Turns == null) throw new InvalidOperationException("Keyboard Worker에서 내보낸 대화 파일(JSON)이 아닙니다.");
-        var turns = package.Turns.Where(t => t != null && t.User != null && t.Assistant is { Length: > 0 }).Take(MaxTurns)
-            .Select(t => t with { CharacterName = t.CharacterName ?? "", TargetKey = t.TargetKey ?? "primary", Mode = t.Mode ?? "" }).ToArray();
-        return turns.Length > 0 ? turns : throw new InvalidOperationException("파일에 대화가 들어 있지 않습니다.");
+        return package == null || package.Format != Format || package.Turns == null ? throw new InvalidOperationException("Keyboard Worker에서 내보낸 대화 파일(JSON)이 아닙니다.") : package;
     }
+    static ChatTurn[] Turns(Package package) =>
+        package.Turns.Where(t => t != null && t.User != null && t.Assistant is { Length: > 0 }).Take(MaxTurns)
+            .Select(t => t with { CharacterName = t.CharacterName ?? "", TargetKey = t.TargetKey ?? "primary", Mode = t.Mode ?? "" }).ToArray();
 }

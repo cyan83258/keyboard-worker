@@ -61,7 +61,7 @@ public static class ModTests
             Check(store.Mods.Count == 0 && !File.Exists(Path.Combine(home, "mods", "my-first-mod.kwmod.json")) && StageMode.All.Count == 2 && LinePacks.All.Length == LinePacks.BuiltIn.Length, "Removing a mod deletes its file and what it added");
             // Two mods cannot collide, with each other or with what is built in
             foreach (string id in new[] { "one", "two" }) { var twin = ModFile.Sample(); twin.Id = id; twin.Themes![0].Id = "strawberry"; twin.PageModes![0].Id = "sms"; string path = Path.Combine(files, id + ".json"); File.WriteAllText(path, JsonSerializer.Serialize(twin, ModFile.Writing)); store.Install(path); }
-            Check(Pastel.Themes.Select(t => t.Id).Distinct().Count() == 7 && StageMode.All.Select(m => m.Id).Distinct().Count() == 4 && LinePacks.All.Select(p => p.Id).Distinct().Count() == LinePacks.BuiltIn.Length + 2 && StageMode.Find("sms").Layout == StageMode.Messenger && Pastel.Themes[0].Id == "strawberry", "Everything a mod adds is named after the mod, so nothing built in can be replaced");
+            Check(Pastel.Themes.Select(t => t.Id).Distinct().Count() == 7 && StageMode.All.Select(m => m.Id).Distinct().Count() == 4 && LinePacks.All.Select(p => p.Id).Distinct().Count() == LinePacks.BuiltIn.Length + 2 && StageMode.Find("sms", StageMode.Messenger) == StageMode.BuiltIn[1] && Pastel.Themes[0].Id == "strawberry", "Everything a mod adds is named after the mod, so nothing built in can be replaced");
         }
         finally { ModStore.Reload(Path.Combine(root, "mods-none")); }
         Check(Pastel.Themes.Length == 5 && StageMode.All.Count == 2, "Afterwards only the built-in content is left");

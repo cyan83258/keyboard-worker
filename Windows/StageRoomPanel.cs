@@ -12,7 +12,7 @@ public sealed class StageRoomPanel : Border
 {
     public const double Wide = 214;
     readonly Buddy buddy; readonly Window owner; readonly Func<bool> busy; readonly Action changed;
-    readonly StackPanel list = new(); readonly TextBox filter = new() { Padding = new Thickness(8, 4, 8, 4), FontSize = 12, Margin = new Thickness(0, 0, 0, 8), ToolTip = "방 이름으로 찾기" }; readonly Button add;
+    readonly StackPanel list = new(); readonly TextBox filter = new() { Padding = new Thickness(8, 4, 8, 4), FontSize = 12, Margin = new Thickness(0, 0, 0, 8), ToolTip = "방 이름으로 찾기" }; readonly Button add, bring;
     string page = "", title = "";
     // busy: an answer is being made, so rooms stay as they are. changed: another room is open now, or the rooms themselves changed.
     public StageRoomPanel(Buddy buddy, Window owner, Func<bool> busy, Action changed)
@@ -22,6 +22,7 @@ public sealed class StageRoomPanel : Border
         var body = new DockPanel(); Child = body;
         var head = new DockPanel { Margin = new Thickness(2, 0, 4, 8) }; DockPanel.SetDock(head, Dock.Top); body.Children.Add(head);
         add = StageParts.Tool("＋ 새 방", "새 채팅방을 만들어요. 방마다 대화, 작가 노트, 기억이 따로예요.", Add); add.Margin = new Thickness(0); DockPanel.SetDock(add, Dock.Right); head.Children.Add(add);
+        bring = StageParts.Tool("⤓", "파일로 내보낸 채팅방을 불러와 새 방으로 만들어요", Import); bring.Margin = new Thickness(0, 0, 4, 0); bring.Padding = new Thickness(8, 5, 8, 5); DockPanel.SetDock(bring, Dock.Right); head.Children.Add(bring);
         head.Children.Add(new TextBlock { Text = "채팅방", Foreground = Pastel.Hot, FontWeight = FontWeights.Bold, FontSize = 15, VerticalAlignment = VerticalAlignment.Center });
         DockPanel.SetDock(filter, Dock.Top); filter.Margin = new Thickness(0, 0, 4, 8); body.Children.Add(filter); filter.TextChanged += (_, _) => Build();
         body.Children.Add(new ScrollViewer { Content = list, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(0, 0, 4, 0) });
@@ -45,7 +46,7 @@ public sealed class StageRoomPanel : Border
     }
     void Build()
     {
-        list.Children.Clear(); add.IsEnabled = page.Length > 0;
+        list.Children.Clear(); add.IsEnabled = bring.IsEnabled = page.Length > 0;
         if (page.Length == 0) { filter.Visibility = Visibility.Collapsed; list.Children.Add(Pastel.Text("서로 다른 두 캐릭터를 고르면 방이 보여요.", 12)); return; }
         var rooms = buddy.Rooms.Rooms(page); var open = buddy.Rooms.Current(page); string words = filter.Text.Trim();
         filter.Visibility = rooms.Count >= 6 || words.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -80,6 +81,18 @@ public sealed class StageRoomPanel : Border
     {
         if (!Pick(room)) return;
         new StageRoomWindow(buddy, page, title) { Owner = owner, ShowInTaskbar = false }.ShowDialog(); changed();
+    }
+    // A room written to a file (the room settings' "파일로 내보내기") comes back as a new room of this page.
+    void Import()
+    {
+        if (busy() || page.Length == 0) return;
+        var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Keyboard Worker 채팅방 (*.json)|*.json" }; if (dialog.ShowDialog(owner) != true) return;
+        try
+        {
+            if (new System.IO.FileInfo(dialog.FileName).Length > 32L * 1024 * 1024) throw new InvalidOperationException("파일이 너무 큽니다.");
+            buddy.ImportRoom(page, StageArchive.ReadRoom(System.IO.File.ReadAllText(dialog.FileName))); changed();
+        }
+        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or InvalidOperationException) { MessageBox.Show(owner, "불러오지 못했습니다. " + e.Message, "채팅방", MessageBoxButton.OK, MessageBoxImage.Information); }
     }
     void Add()
     {

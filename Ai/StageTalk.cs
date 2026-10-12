@@ -34,7 +34,7 @@ public static class StageTalk
     }
     // The page's instruction: its prompt with the names and the wanted length filled in, then what the mode adds.
     public static string Instruction(StageTalkOptions options, StageMode mode, Persona persona) =>
-        "\n[캐릭터 페이지의 대화]\n" + PromptTemplates.Expand(options.Prompt, new Dictionary<string, string> { ["name"] = persona.Name, ["user_name"] = persona.UserName ?? "", ["length"] = StageTalkOptions.Guide(mode.Length.Length > 0 ? mode.Length : options.Length) }).Trim() + mode.Prompt;
+(mode.Layout == StageMode.Messenger ? "\n[문자 메시지]\n" : "\n[캐릭터 페이지의 대화]\n") + PromptTemplates.Expand(options.Prompt, new Dictionary<string, string> { ["name"] = persona.Name, ["user_name"] = persona.UserName ?? "", ["length"] = StageTalkOptions.Guide(mode.Length.Length > 0 ? mode.Length : options.Length) }).Trim() + mode.Prompt;
     public static async Task<StageReply> Send(StageLog log, ChatPreferences preferences, Persona persona, string thread, string text, string state, StageScene scene, StageTalkOptions options, StageMode mode, CancellationToken cancellation, Action<string>? progress = null, AiClient? client = null)
     {
         if (string.IsNullOrWhiteSpace(text) || text.Length > 6000) throw new InvalidOperationException("메시지는 1~6000자로 입력해 주세요.");

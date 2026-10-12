@@ -13,7 +13,7 @@ namespace KeyboardWorker;
 // and the line being said in a box along the bottom. What the character does or thinks (the bracketed parts of an answer)
 // is shown apart from the speech, in a small note above the box. A long answer comes a page at a time: a click anywhere on
 // the stage (or "다음") turns the page, a right click (or "이전") goes back.
-public sealed class StageView : Grid, IStageSurface
+public sealed class StageView : Grid
 {
     readonly Image backdrop = new() { Stretch = Stretch.UniformToFill, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     readonly Image figure = new() { Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom };
@@ -39,8 +39,6 @@ public sealed class StageView : Grid, IStageSurface
     public bool Continues { get; set; }
     public bool Earlier { get; set; }
     public bool LowPower { get; set; }
-    public FrameworkElement Element => this;
-    public bool Scrolls => false;
     public StageView()
     {
         ClipToBounds = true; MinHeight = 260;
@@ -105,9 +103,7 @@ public sealed class StageView : Grid, IStageSurface
     // ---- the line ----
     // About two lines of the box, in characters (a Korean letter is roughly as wide as the font is tall).
     int Budget() => Math.Max(24, (int)(Math.Max(240, ActualWidth - 66) / (line.FontSize * .98)) * 2);
-    public void Load(string name, IReadOnlyList<ChatTurn> thread) { }
-    public void Asked(string name, string message) { pages.Clear(); Put(name, "", "…", false); }
-    public void Failed() { }
+    public void Asked(string name) { pages.Clear(); Put(name, "", "…", false); }
     // While the answer arrives it is shown whole and scrolls; the pages are made when it is complete.
     public void Streaming(string name, string partial)
     {

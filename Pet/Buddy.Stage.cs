@@ -36,7 +36,9 @@ public sealed partial class Buddy
     }
     // After an exchange, in the background. A failure is not shown: the memory is simply brought up to date next time.
     async void RememberQuietly(string thread, StageRoom room) { try { await Remember(thread, room, false); } catch (Exception) { } }
-    public StageMode PageMode => StageMode.Find(Stage.State.Mode);
+    // The character page and text messages are two separate things; each has a mode of its own (more than one only with mods).
+    public StageMode StageModeNow => StageMode.Find(Stage.State.Mode, StageMode.Stage);
+    public StageMode TextModeNow => StageMode.Find(Stage.State.TextMode, StageMode.Messenger);
     // A character that has a page: the main pet, the second pet and every other saved preset.
     // Title tells two presets of the same character apart ("별명 (루카)").
     public sealed record StageCharacter(string Id, string Name, Persona Persona, IReadOnlyDictionary<string, string>? Book, string Role, string Title);
@@ -48,7 +50,7 @@ public sealed partial class Buddy
         return list;
     }
     // One exchange on a character's page. note: something that just happened there (a gift), told to the character with the message.
-    public async Task<StageReply> SendOnStage(string id, string text, CancellationToken cancellation, Action<string> progress, string note = "")
+    public async Task<StageReply> SendOnPage(string id, StageMode mode, string text, CancellationToken cancellation, Action<string> progress, string note = "")
     {
         if (IsChatBusy) throw new InvalidOperationException("이전 답변을 기다리거나 먼저 생성을 중단해 주세요.");
         var all = StageCharacters(); var who = all.FirstOrDefault(c => c.Id == id) ?? throw new InvalidOperationException("캐릭터를 찾을 수 없어요.");
@@ -56,13 +58,13 @@ public sealed partial class Buddy
         bool streaming = Chat.Preferences.Streaming; using var pump = new StreamPump(partial => { if (!closing) progress(StageTalk.Shown(partial, who.Name)); }, streaming);
         try
         {
-            bool onScreen = id == CharacterId || companion?.Preset.Id == id; var mode = PageMode;
+            bool onScreen = id == CharacterId || companion?.Preset.Id == id; var options = mode.Layout == StageMode.Messenger ? Stage.State.Texting : Stage.State.Talk;
             string state = Adventure.Context(id, who.Name) + (onScreen ? Feelings(id != CharacterId) : Affection.Context(Adventure.Friend(id, who.Name).Bond)) + await Surroundings(null);
             // The backgrounds are only offered when the user lets the character change them.
             var backdrops = Stage.State.AutoBackdrop ? Stage.Backdrops.Select(b => b.Title).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() : Array.Empty<string>();
             var scene = new StageScene(StageTags.Names(Stage.Set(id).Sprites), backdrops, Stage.CurrentTitle, all.Select(c => c.Name).Where(n => n != who.Name).Distinct().ToArray(), note);
             string key = mode.Thread(id); var room = Rooms.Current(key); string thread = StageRooms.Thread(key, room);
-            var reply = await StageTalk.Send(StageTalks, Chat.Preferences, who.Persona, thread, text, state + room.Context(), scene, Stage.State.Talk, mode, request.Token, streaming ? pump.Report : null);
+            var reply = await StageTalk.Send(StageTalks, Chat.Preferences, who.Persona, thread, text, state + room.Context(), scene, options, mode, request.Token, streaming ? pump.Report : null);
             if (!closing) { ProgressCount("chats"); RememberQuietly(thread, room); }
             return reply;
         }
@@ -99,7 +101,23 @@ public sealed partial class Buddy
         }
         finally { activeChatCancellation = null; sending = false; }
     }
-    Window? pairStage;
+    // A room read from a file becomes a new room of the page, with its talk, note and memory.
+    public StageRoom ImportRoom(string page, StageArchive.RoomFile file)
+    {
+        string kind = StageMode.Kind(page); if (file.Kind.Length > 0 && file.Kind != kind) throw new InvalidOperationException("다른 종류의 방이에요. " + (file.Kind == StageMode.Pair ? "둘만의 페이지" : file.Kind == StageMode.Messenger ? "문자 메시지" : "캐릭터 페이지(마주 보기)") + "에서 불러와 주세요.");
+        var room = Rooms.Add(page, file.Name); room.Note = file.Note; room.Summary = file.Summary; if (file.Summary.Trim().Length > 0 && file.Turns.Length > 0) room.SummarizedAt = file.Turns.Max(t => t.At);
+        Rooms.Save(); StageTalks.Import(StageRooms.Thread(page, room), file.Turns); return room;
+    }
+    Window? pairStage, messenger;
+    public void OpenMessenger(string? id = null) { Open(ref messenger, () => new MessengerWindow(this), w => messenger = w); if (id != null) (messenger as MessengerWindow)?.Select(id); }
+    // The tabs of the page windows: the other page opens where this one stood, and this one closes.
+    public void SwitchPage(Window from, string kind, string? id)
+    {
+        if (kind == StageMode.Pair) OpenPairPage(); else if (kind == StageMode.Messenger) OpenMessenger(id); else OpenCharacter(id);
+        var target = kind == StageMode.Pair ? pairStage : kind == StageMode.Messenger ? messenger : characterWindow; if (target == null || ReferenceEquals(target, from)) return;
+        if (from.WindowState == WindowState.Normal) { target.Left = from.Left; target.Top = from.Top; target.Width = Math.Max(target.MinWidth, from.Width); target.Height = Math.Max(target.MinHeight, from.Height); }
+        target.WindowState = from.WindowState; from.Close();
+    }
     public void OpenPairPage() => Open(ref pairStage, () => new PairStageWindow(this), w => pairStage = w);
     public void OpenFonts(Window? owner = null) { var window = new FontWindow(this) { ShowInTaskbar = false }; if (owner != null) window.Owner = owner; window.ShowDialog(); }
     Window? characterWindow, giftWindow;
@@ -110,7 +128,7 @@ public sealed partial class Buddy
         Open(ref characterWindow, () => new CharacterWindow(this), w => characterWindow = w);
         if (id != null) (characterWindow as CharacterWindow)?.Select(id);
     }
-    void CloseStageWindows() { characterWindow?.Close(); giftWindow?.Close(); pairStage?.Close(); }
+    void CloseStageWindows() { characterWindow?.Close(); giftWindow?.Close(); pairStage?.Close(); messenger?.Close(); }
 
     // ---- what mod files add ----
     public bool OwnsPack(LinePack pack) => pack.Price == 0 || Progress.IsUnlocked(LinePacks.Key(pack.Id));

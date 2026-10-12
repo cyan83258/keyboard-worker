@@ -24,17 +24,12 @@ public sealed class PairStageWindow : Window
     Buddy.StageCharacter A => ((Choice)first.SelectedItem).Character; Buddy.StageCharacter B => ((Choice)second.SelectedItem).Character;
     public PairStageWindow(Buddy buddy)
     {
-        this.buddy = buddy; view.LowPower = buddy.Pref.LowPower; bond.Foreground = Pastel.Hot; var root = new DockPanel { Margin = new Thickness(16) };
-        var top = new DockPanel { Margin = new Thickness(0, 0, 0, 10) }; DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center }; DockPanel.SetDock(actions, Dock.Right); top.Children.Add(actions);
-        rooms = new StageRoomPanel(buddy, this, () => busy, Enter);
-        var fold = StageParts.Tool("☰", "채팅방 목록 접기 / 펼치기", () => rooms.Open = !rooms.Open); fold.Margin = new Thickness(0, 0, 8, 0); fold.FontSize = 14; DockPanel.SetDock(fold, Dock.Left); top.Children.Add(fold);
-        void Tool(string text, string tip, Action action) => actions.Children.Add(StageParts.Tool(text, tip, action));
-        Tool("대화 기록", "둘이 나눈 장면을 다시 보고, 고치고, 모아 두고, 정리해요", () => { if (busy || !Ready) return; new StageHistoryWindow(buddy, Thread) { Owner = this, ShowInTaskbar = false }.ShowDialog(); Enter(); });
-        Tool("페이지 설정", "스탠딩 그림 · 배경 · 프롬프트와 길이", () => { new StageSettingsWindow(buddy, A) { Owner = this, ShowInTaskbar = false }.ShowDialog(); view.Forget(); Enter(); });
-        var heart = new TextBlock { Text = "♡", Foreground = Pastel.Hot, FontSize = 18, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) };
-        foreach (var part in new UIElement[] { first, heart, second }) { if (part is ComboBox box) box.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(part, Dock.Left); top.Children.Add(part); }
-        top.Children.Add(new Border());   // the space between the two sides
+        this.buddy = buddy; view.LowPower = buddy.Pref.LowPower; bond.Foreground = Pastel.Hot;
+        var page = new PageFrame(buddy, this, StageMode.Pair, () => busy, Enter, () => first.SelectedItem == null ? null : A.Id); rooms = page.Rooms; var root = page.Root;
+        page.Tool("대화 기록", "둘이 나눈 장면을 다시 보고, 고치고, 모아 두고, 정리해요", () => { if (busy || !Ready) return; new StageHistoryWindow(buddy, Thread) { Owner = this, ShowInTaskbar = false }.ShowDialog(); Enter(); });
+        page.Tool("페이지 설정", "스탠딩 그림 · 배경 · 프롬프트와 길이", () => { new StageSettingsWindow(buddy, A) { Owner = this, ShowInTaskbar = false }.ShowDialog(); view.Forget(); Enter(); });
+        var heart = new TextBlock { Text = "♡", Foreground = Pastel.Hot, FontSize = 18, FontWeight = FontWeights.Bold, Margin = new Thickness(8, 0, 8, 0) };
+        page.Left(first); page.Left(heart); page.Left(second);
 
         var bottom = new StackPanel { Margin = new Thickness(0, 10, 0, 0) }; DockPanel.SetDock(bottom, Dock.Bottom); root.Children.Add(bottom);
         var row = new DockPanel(); var buttons = new StackPanel { Orientation = Orientation.Horizontal }; DockPanel.SetDock(buttons, Dock.Right); row.Children.Add(buttons);
@@ -55,8 +50,7 @@ public sealed class PairStageWindow : Window
         filling = true; first.ItemsSource = people; second.ItemsSource = people; first.SelectedIndex = 0; second.SelectedIndex = people.Length > 1 ? 1 : 0; filling = false;
         first.SelectionChanged += (_, _) => { if (!filling) Enter(); }; second.SelectionChanged += (_, _) => { if (!filling) Enter(); };
         buddy.Adventure.Changed += Closeness; Closed += (_, _) => { buddy.Adventure.Changed -= Closeness; request?.Cancel(); };
-        var shell = new DockPanel(); DockPanel.SetDock(rooms, Dock.Left); shell.Children.Add(rooms); shell.Children.Add(root);
-        Pastel.Window(this, "둘만의 페이지", shell, 1140, 840); MinWidth = 900; MinHeight = 560;
+        Pastel.Window(this, "둘만의 페이지", page.Shell, 1140, 840); MinWidth = 900; MinHeight = 560;
         view.SetFont(FontAssets.Get(buddy.Pref.StageFontPath), buddy.Pref.StageFontSize); Activated += (_, _) => view.SetFont(FontAssets.Get(buddy.Pref.StageFontPath), buddy.Pref.StageFontSize);
         Enter(); Loaded += (_, _) => input.Focus();
     }

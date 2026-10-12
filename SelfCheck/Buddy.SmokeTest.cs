@@ -116,14 +116,16 @@ public sealed partial class Buddy
         var artView = new StageSettingsWindow(this, StageCharacters()[0]); artView.Show();
         for (int i = 0; i < artView.Pages; i++) { artView.ShowPage(i); artView.UpdateLayout(); Pastel.Capture(artView, Path.Combine(shots, "ui-stage-settings-" + i + ".png")); }
         artView.Close(); pageView.Close();
-        var roomView = new StageRoomWindow(this, PageMode.Thread(StageCharacters()[0].Id), StageCharacters()[0].Name); roomView.Show(); roomView.UpdateLayout(); Pastel.Capture(roomView, Path.Combine(shots, "ui-stage-room.png")); roomView.Close();
+        var textView = new MessengerWindow(this); textView.Show(); textView.UpdateLayout(); Pastel.Capture(textView, Path.Combine(shots, "ui-messenger.png"));
+        var textSettings = new StageSettingsWindow(this, StageCharacters()[0], true); textSettings.Show(); textSettings.UpdateLayout(); Pastel.Capture(textSettings, Path.Combine(shots, "ui-messenger-settings.png")); textSettings.Close(); textView.Close();
+        var roomView = new StageRoomWindow(this, StageModeNow.Thread(StageCharacters()[0].Id), StageCharacters()[0].Name); roomView.Show(); roomView.UpdateLayout(); Pastel.Capture(roomView, Path.Combine(shots, "ui-stage-room.png")); roomView.Close();
         foreach (bool keptView in new[] { false, true }) { var historyView = new StageHistoryWindow(this, StageCharacters()[0].Id, keptView); historyView.Show(); historyView.UpdateLayout(); Pastel.Capture(historyView, Path.Combine(shots, keptView ? "ui-stage-clips.png" : "ui-stage-history.png")); historyView.Close(); }
         // The two surfaces with a made-up answer: stage directions apart from the speech, a long answer in pages, and text messages.
         string sampleAnswer = "(팔짱을 낀 채 창밖을 본다) 흥, 이제야 왔군. 기다리게 한 값은 치러야지. 오늘 있었던 일을 하나도 빠짐없이 말해 보아라. (작게 웃으며) 지루한 이야기라도 들어는 주마. 다만 변명은 듣지 않겠다.";
         var stageSample = new StageView { Width = 760, Height = 520 }; var sampleHost = new Window { Content = stageSample, Width = 780, Height = 560, ShowActivated = false, ShowInTaskbar = false, WindowStyle = WindowStyle.None }; sampleHost.Show(); sampleHost.UpdateLayout();
         stageSample.Present("루카", sampleAnswer, false); sampleHost.UpdateLayout(); Pastel.Capture(sampleHost, Path.Combine(shots, "ui-stage-sample.png")); sampleHost.Close();
         var textSample = new MessengerView { Width = 760, Height = 520 }; var textHost = new Window { Content = textSample, Width = 780, Height = 560, ShowActivated = false, ShowInTaskbar = false, WindowStyle = WindowStyle.None }; textHost.Show();
-        textSample.Load("루카", new[] { new ChatTurn("뭐 해?", "별일 없다.\n너야말로 이 시간에 무슨 일이냐.", DateTimeOffset.Now, "루카") }); textSample.Asked("루카", "그냥 생각나서"); textSample.Present("루카", "…흥.\n싫지는 않군.", false); textHost.UpdateLayout(); Pastel.Capture(textHost, Path.Combine(shots, "ui-messenger-sample.png")); textHost.Close();
+        textSample.Load(new[] { new ChatTurn("뭐 해?", "별일 없다.\n너야말로 이 시간에 무슨 일이냐.", DateTimeOffset.Now.AddMinutes(-3), "루카"), new ChatTurn("그냥 생각나서", "…흥.\n싫지는 않군.", DateTimeOffset.Now, "루카") }); textSample.Asked("내일 볼래?"); textSample.Streaming("생각해 보지."); textHost.UpdateLayout(); Pastel.Capture(textHost, Path.Combine(shots, "ui-messenger-sample.png")); textHost.Close();
         var giftView = new GiftWindow(this); giftView.Show();
         for (int i = 0; i < giftView.Pages; i++) { giftView.ShowPage(i); giftView.UpdateLayout(); Pastel.Capture(giftView, Path.Combine(shots, "ui-gifts-" + i + ".png")); }
         giftView.Close();

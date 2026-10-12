@@ -23,6 +23,17 @@ public sealed class StageTalkOptions
         - 화면·파일·실제 작업은 볼 수 없으며 보았다고 꾸미지 않습니다.
         - 답변 길이: {length}
         """;
+    // Text messages are another thing altogether: their own prompt, length and room, set in their own window.
+    public const string StandardTextPrompt = """
+        지금 {name}은(는) 사용자({user_name})와 휴대폰 메신저로 문자를 주고받고 있습니다. 마주 보고 있지 않습니다.
+        - 답하는 사람은 {name} 한 명뿐입니다. 사용자의 메시지를 대신 쓰지 않고, 메시지 앞에 이름을 붙이지 않습니다.
+        - 실제 문자처럼 짧은 메시지 1~3개로 답하고, 메시지 사이는 줄바꿈으로 나눕니다. 행동 지문이나 (괄호)는 쓰지 않습니다.
+        - 프로필의 성격·말투·가치관을 끝까지 지킵니다. 이모티콘·말줄임표·오타·답장 속도 같은 문자 습관은 이 캐릭터가 실제로 그럴 법한 만큼만 드러냅니다.
+        - 사용자의 말을 되풀이하거나 무난한 맞장구로 끝내지 않습니다. 가끔은 먼저 묻고, 화제를 바꾸고, 놀리고, 답을 미룹니다.
+        - 지난 문자의 흐름을 이어 가고, 매번 인사하지 않습니다. 화면·파일·실제 작업은 볼 수 없으며 보았다고 꾸미지 않습니다.
+        - 한 번에 보내는 분량: {length}
+        """;
+    public static StageTalkOptions Texting() => new() { Length = "짧게", MaxTokens = 1024, ContextTurns = 20, Prompt = StandardTextPrompt };
     public string Length { get; set; } = "중간";
     public int MaxTokens { get; set; } = 2048;      // room for the answer (models that think first use part of it)
     public int ContextTurns { get; set; } = 12;     // how many earlier exchanges the character is shown
@@ -41,11 +52,12 @@ public sealed class StageTalkOptions
     public string PairPrompt { get; set; } = StandardPairPrompt;
     public static string Guide(string length) => Lengths.FirstOrDefault(l => l.Name == length).Guide ?? Lengths[2].Guide;
     public StageTalkOptions Snapshot() => (StageTalkOptions)MemberwiseClone();
-    public void Normalize()
+    // standard: the prompt an emptied one goes back to (the page's, or the text messages').
+    public void Normalize(string standard = StandardPrompt)
     {
         if (Lengths.All(l => l.Name != Length)) Length = "중간";
         MaxTokens = Math.Clamp(MaxTokens, 256, 16000); ContextTurns = Math.Clamp(ContextTurns, 0, 60); KeepTurns = Math.Clamp(KeepTurns, 50, StageLog.MaxKeep);
-        Prompt = string.IsNullOrWhiteSpace(Prompt) ? StandardPrompt : Prompt[..Math.Min(Prompt.Length, 10000)];
+        Prompt = string.IsNullOrWhiteSpace(Prompt) ? standard : Prompt[..Math.Min(Prompt.Length, 10000)];
         PairPrompt = string.IsNullOrWhiteSpace(PairPrompt) ? StandardPairPrompt : PairPrompt[..Math.Min(PairPrompt.Length, 10000)];
     }
 }
@@ -107,17 +119,23 @@ public sealed class StageLog
     void Save() { OrderedStore.SaveJson(path, threads.ToDictionary(p => p.Key, p => p.Value.ToArray())); Changed?.Invoke(); }
 }
 
-// A way of talking on a character page: the layout it uses and what it adds to the prompt. Two are built in; mod files add more.
+// A way of talking with a character. Layout says which of the two things it is: the character page (Stage: standing picture
+// and dialogue box) or text messages (Messenger). The two share nothing - each has its own window, settings, rooms and
+// threads. One of each is built in; mod files add more.
 public sealed record StageMode(string Id, string Name, string Layout, string Prompt, string Length = "", string Source = "")
 {
-    public const string Stage = "stage", Messenger = "messenger";
-    public static readonly StageMode[] BuiltIn =
-    {
-        new("stage", "마주 보기", Stage, ""),
-        new("sms", "문자 메시지", Messenger, "\n[문자 메시지 모드]\n지금은 마주 보고 있지 않고, 휴대폰 메신저로 문자를 주고받고 있습니다. 실제 문자처럼 짧은 메시지 1~3개로 답하고, 메시지 사이는 줄바꿈으로 나눕니다. 행동 지문이나 (괄호)는 쓰지 않습니다. 이모티콘·말줄임표·오타·답장 속도 같은 문자 습관은 이 캐릭터가 실제로 그럴 법한 만큼만 드러냅니다. 위의 '답변 길이'보다 이 규칙이 우선합니다.")
-    };
+    public const string Stage = "stage", Messenger = "messenger", Pair = "pair";
+    public static readonly StageMode[] BuiltIn = { new("stage", "마주 보기", Stage, ""), new("sms", "문자 메시지", Messenger, "") };
     public static IReadOnlyList<StageMode> All => BuiltIn.Concat(ModStore.Current.PageModes).ToArray();
-    public static StageMode Find(string? id) => All.FirstOrDefault(m => m.Id == id) ?? BuiltIn[0];
-    // The key of this mode's own thread of talk with a character.
+    public static StageMode[] Of(string layout) => All.Where(m => m.Layout == layout).ToArray();
+    // The mode with this id among those of a layout; the built-in one when there is none.
+    public static StageMode Find(string? id, string layout = Stage) { var modes = Of(layout); return modes.FirstOrDefault(m => m.Id == id) ?? modes[0]; }
+    // The key of this mode's page with a character (its rooms and threads hang on it).
     public string Thread(string characterId) => Id == BuiltIn[0].Id ? characterId : characterId + "|" + Id;
+    // Which of the three kinds of page a key or thread belongs to: Stage, Messenger or Pair.
+    public static string Kind(string thread)
+    {
+        string key = StageRooms.Split(thread).Key; if (key.StartsWith("pair:", StringComparison.Ordinal)) return Pair;
+        int bar = key.IndexOf('|'); return bar >= 0 && All.FirstOrDefault(m => m.Id == key[(bar + 1)..])?.Layout == Messenger ? Messenger : Stage;
+    }
 }
