@@ -70,6 +70,16 @@ public static class RoomTests
         var noon = new DateTime(2026, 5, 10, 12, 0, 0);
         Check(StageRoomPanel.When(new DateTimeOffset(noon.AddHours(-3)), noon) == "오늘 09:00" && StageRoomPanel.When(new DateTimeOffset(noon.AddDays(-1)), noon) == "어제" && StageRoomPanel.When(new DateTimeOffset(noon.AddDays(-20)), noon) == "4월 20일" && StageRoomPanel.When(new DateTimeOffset(noon.AddYears(-1)), noon) == "2025. 5. 10.", "A room says when it was last talked in");
 
+        // ---- what text messages can be ----
+        var noTurns = Array.Empty<ChatTurn>(); var plainLast = new[] { new ChatTurn("안녕", "왔군.", DateTimeOffset.Now, "루카") }; var emojiLast = new[] { plainLast[0], new ChatTurn("좋아 😊", "그래 ❤", DateTimeOffset.Now, "루카") };
+        Check(StageTalk.HasEmoji("그래 ❤") && StageTalk.HasEmoji("😊") && StageTalk.HasEmoji("☀") && !StageTalk.HasEmoji("ㅋㅋ ^^ ;; …♡") && !StageTalk.HasEmoji(""), "Picture characters are told from letters and plain marks");
+        string open = StageTalk.TextRules(true, noTurns), strict = StageTalk.TextRules(false, plainLast);
+        Check(open.Contains("서로 다른 곳") && open.Contains("쓰다듬기") && open.Contains("찾아가거나") && open.Contains("어울릴 때만") && strict.Contains("문자 전용 표현은 쓰지 않습니다") && !strict.Contains("어울릴 때만"), "Text messages know they are text: no touching, no turning up; texting slang as the user chose");
+        Check(!open.Contains("이번 답장에는 이모티콘을 하나도") && !strict.Contains("이번 답장에는 이모티콘을 하나도") && StageTalk.TextRules(true, emojiLast).Contains("이번 답장에는 이모티콘을 하나도") && open.Contains("따라 붙이지 않고"), "An answer with emoji is followed by one without, so they do not become a habit");
+        var keepFew = new StageTalkOptions { KeepTurns = 5 }; keepFew.Normalize(); Check(keepFew.KeepTurns == 30 && StageLog.Limits.Contains(30) && StageLog.Limits.Contains(50) && StageTalkOptions.Texting().Slang, "Thirty and fifty exchanges can be chosen as the limit");
+        var withPicture = new StageState { TextBackdrop = @"C:\somewhere\texting.jpg" };
+        Check(StageBook.Files(withPicture).Contains(@"C:\somewhere\texting.jpg") && withPicture.Snapshot().TextBackdrop == withPicture.TextBackdrop && !StageBook.Files(new StageState()).Any(), "The picture behind the text messages counts as a file in use");
+
         // ---- memory ----
         var day = new DateTimeOffset(2026, 5, 1, 9, 0, 0, TimeSpan.Zero); var room = new StageRoom();
         var turns = Enumerable.Range(0, 12).Select(i => new ChatTurn("말 " + i, "답 " + i, day.AddMinutes(i), "루카", "g")).ToArray();

@@ -35,7 +35,7 @@ public sealed class CharacterWindow : Window
 
         var bottom = new StackPanel { Margin = new Thickness(0, 10, 0, 0) }; DockPanel.SetDock(bottom, Dock.Bottom); frame.Root.Children.Add(bottom);
         var entry = PageFrame.Entry(async () => await Say(), () => request?.Cancel(), () => busy, 6000); input = entry.Input; send = entry.Send;
-        again = Pastel.Button("↻", async () => await Again(), true); again.Padding = new Thickness(12, 6, 12, 6); again.Margin = new Thickness(6, 0, 0, 0); again.VerticalAlignment = VerticalAlignment.Bottom; again.ToolTip = "마지막 답변을 지우고 다시 받아요";
+        again = Pastel.Button("↻ 다시", async () => await Again(), true); again.Padding = new Thickness(12, 6, 12, 6); again.Margin = new Thickness(6, 0, 0, 0); again.VerticalAlignment = VerticalAlignment.Bottom; again.ToolTip = "방금 답변이 마음에 들지 않으면 지우고 다시 받아요";
         DockPanel.SetDock(again, Dock.Right); entry.Row.Children.Add(again); entry.Row.Children.Add(input); bottom.Children.Add(entry.Row); status.Margin = new Thickness(2, 6, 0, 0); bottom.Children.Add(status);
 
         // Closeness as hearts, small, in the upper right corner of the stage.
@@ -85,7 +85,7 @@ public sealed class CharacterWindow : Window
         var values = new Dictionary<string, string> { ["user"] = current.Persona.UserName ?? "", ["name"] = current.Name, ["partner"] = "" };
         string? greeting = LineBook.Pick(LineBook.Text(current.Book, "", "", LineBook.Greeting(DateTime.Now.Hour)), stage, values, ref avoid);
         if (greeting != null) { cursor = turns.Length; Put(greeting, true); } else Put(turns.Length > 0 ? turns[^1].Assistant : "……", false);
-        status.Text = turns.Length > 0 ? $"이 방에서 나눈 대화 {turns.Length}개가 이어집니다. 화면을 누르면 다음, 오른쪽 클릭이나 '◀ 이전'으로 돌아가요." : "아래에 말을 걸어 보세요. AI 연결이 필요해요 (설정 → 말 걸기·AI → AI 연결).";
+        status.Text = "";
     }
     void Turn(int step)
     {

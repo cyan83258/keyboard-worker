@@ -18,7 +18,7 @@ public sealed class PairStageWindow : Window
     readonly Buddy buddy; readonly StageView view = new(); readonly HeartMeter hearts = new(18);
     readonly ComboBox first = new() { DisplayMemberPath = "Label", MinWidth = 150 }, second = new() { DisplayMemberPath = "Label", MinWidth = 150 }, kind = new() { DisplayMemberPath = "Label", MinWidth = 150, Margin = new Thickness(0, 0, 6, 0) };
     readonly TextBlock bond = new() { FontWeight = FontWeights.Bold, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(3, 0, 7, 1) }, status = Pastel.Text("", 12);
-    readonly TextBox input = new() { MaxLength = 2000, Padding = new Thickness(10, 7, 10, 7), FontSize = 15 }; readonly Button go, stop; readonly StageRoomPanel rooms;
+    readonly TextBox input = new() { MaxLength = 2000, Padding = new Thickness(10, 7, 10, 7), FontSize = 15 }; readonly Button go, stop, again; readonly StageRoomPanel rooms; (string Kind, string Text) asked = (PairStageTalk.Continue, "");
     sealed record Choice(Buddy.StageCharacter Character, string Label); sealed record Kind(string Key, string Label);
     CancellationTokenSource? request; List<PairLine> lines = new(); int at; bool busy, filling;
     Buddy.StageCharacter A => ((Choice)first.SelectedItem).Character; Buddy.StageCharacter B => ((Choice)second.SelectedItem).Character;
@@ -34,7 +34,7 @@ public sealed class PairStageWindow : Window
         var bottom = new StackPanel { Margin = new Thickness(0, 10, 0, 0) }; DockPanel.SetDock(bottom, Dock.Bottom); root.Children.Add(bottom);
         var row = new DockPanel(); var buttons = new StackPanel { Orientation = Orientation.Horizontal }; DockPanel.SetDock(buttons, Dock.Right); row.Children.Add(buttons);
         Button Small(string text, Action action, bool blue, string tip) { var button = Pastel.Button(text, action, blue); button.Padding = new Thickness(14, 6, 14, 6); button.Margin = new Thickness(6, 0, 0, 0); button.ToolTip = tip; buttons.Children.Add(button); return button; }
-        go = Small("▶ 진행", async () => await Play(), false, "둘의 장면을 이어 갑니다 (Enter)"); stop = Small("중단", () => request?.Cancel(), true, "장면 만들기를 멈춰요"); stop.IsEnabled = false;
+        go = Small("▶ 진행", async () => await Play(), false, "둘의 장면을 이어 갑니다 (Enter)"); stop = Small("중단", () => request?.Cancel(), true, "장면 만들기를 멈춰요"); stop.IsEnabled = false; again = Small("↻ 다시", async () => await Again(), true, "방금 장면이 마음에 들지 않으면 지우고 다시 받아요");
         kind.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(kind, Dock.Left); row.Children.Add(kind); row.Children.Add(input); bottom.Children.Add(row); status.Margin = new Thickness(2, 6, 0, 0); bottom.Children.Add(status);
         input.KeyDown += async (_, e) => { if (e.Key == Key.Enter && !busy) { e.Handled = true; await Play(); } };
         kind.SelectionChanged += (_, _) => Hint();
@@ -77,8 +77,8 @@ public sealed class PairStageWindow : Window
         bool none = buddy.Stage.Set(A.Id).Sprites.Count == 0 && buddy.Stage.Set(B.Id).Sprites.Count == 0;
         view.EmptyNote = none ? "두 사람의 스탠딩 그림이 아직 없어요.\n각자의 캐릭터 페이지 → 페이지 설정에서 넣을 수 있어요." : "";
         var last = buddy.StageTalks.Turns(Thread).LastOrDefault(); lines = last == null ? new() : PairStageTalk.FromScript(last.Assistant, A.Name, B.Name);
-        if (lines.Count > 0) { at = lines.Count - 1; Show(false); status.Text = $"두 사람이 여기서 나눈 장면 {buddy.StageTalks.Turns(Thread).Count}개가 이어집니다. '진행'을 누르면 계속돼요."; }
-        else { Stand(new PairLine(false, ""), true); view.Present(A.Name, "……", false); status.Text = "'진행'을 누르면 두 사람이 이야기를 시작해요. 상황을 적어 주거나, 한 사람의 대사를 직접 써 줄 수도 있어요. AI 연결이 필요합니다."; }
+        status.Text = ""; again.IsEnabled = !busy && last != null; if (lines.Count > 0) { at = lines.Count - 1; Show(false); }
+        else { Stand(new PairLine(false, ""), true); view.Present(A.Name, "……", false); }
     }
     string Picture(Buddy.StageCharacter who, PairLine line, bool speaking)
     {
@@ -100,30 +100,39 @@ public sealed class PairStageWindow : Window
         var line = lines[at]; Stand(line); view.Continues = at < lines.Count - 1; view.Earlier = at > 0; view.Present(line.Second ? B.Name : A.Name, line.Text, typed);
     }
     // A click past the end of a line: the next line of the scene, if there is one.
-    void Next() { if (busy || at >= lines.Count - 1) return; at++; Show(true); if (at == lines.Count - 1) status.Text = "장면이 끝났어요. '진행'을 누르면 이어집니다."; }
+    void Next() { if (busy || at >= lines.Count - 1) return; at++; Show(true); }
 
     void Previous() { if (busy || at <= 0 || lines.Count == 0) return; at--; Show(false); view.ShowLastPage(); }
 
-    async Task Play()
+    // The scene just played is taken back and asked for again, with what was asked the first time; it returns if no new one comes.
+    async Task Again()
     {
-        if (busy || !Ready) return; var a = A; var b = B; string choice = (kind.SelectedItem as Kind)?.Key ?? PairStageTalk.Continue, text = input.Text.Trim();
+        string thread = Thread; var last = buddy.StageTalks.Turns(thread).LastOrDefault(); if (busy || !Ready || last == null) return;
+        buddy.StageTalks.Remove(thread, last);
+        if (!await Play(asked)) { buddy.StageTalks.Import(thread, new[] { last }); Enter(); }
+    }
+    // One scene. repeat: what to ask instead of what is typed (answering again). False when no scene came.
+    async Task<bool> Play((string Kind, string Text)? repeat = null)
+    {
+        if (busy || !Ready) return false; var a = A; var b = B; string choice = repeat?.Kind ?? (kind.SelectedItem as Kind)?.Key ?? PairStageTalk.Continue, text = repeat?.Text ?? input.Text.Trim(); bool played = false;
         if (choice != PairStageTalk.Continue && text.Length == 0) choice = PairStageTalk.Continue;
-        busy = true; go.IsEnabled = false; stop.IsEnabled = true; first.IsEnabled = second.IsEnabled = kind.IsEnabled = input.IsEnabled = false; request = new CancellationTokenSource();
+        busy = true; go.IsEnabled = again.IsEnabled = false; stop.IsEnabled = true; first.IsEnabled = second.IsEnabled = kind.IsEnabled = input.IsEnabled = false; request = new CancellationTokenSource();
         status.Text = choice == PairStageTalk.Situation ? "상황: " + SafeFiles.OneLine(text, 100) : choice == PairStageTalk.Continue ? "두 사람이 이야기하는 중…" : (choice == PairStageTalk.AsFirst ? a.Name : b.Name) + ": " + SafeFiles.OneLine(text, 100);
         view.Continues = view.Earlier = false; view.Present(lines.Count > 0 ? (lines[^1].Second ? b.Name : a.Name) : a.Name, "…", false);
         try
         {
-            var scene = await buddy.SendPairOnStage(a, b, choice, text, request.Token); input.Clear();
+            var scene = await buddy.SendPairOnStage(a, b, choice, text, request.Token); if (repeat == null) input.Clear(); asked = (choice, text); played = true;
             buddy.Stage.Move(scene.Backdrop, text + "\n" + string.Join("\n", scene.Lines.Select(l => l.Text)));
-            lines = scene.Lines.ToList(); at = 0; Stand(lines[0], true); Show(true); status.Text = lines.Count > 1 ? "화면을 누르면 다음 대사, 오른쪽 클릭이나 '◀ 이전'으로 앞 대사를 볼 수 있어요. (" + lines.Count + "마디)" : "장면이 끝났어요. '진행'을 누르면 이어집니다.";
+            lines = scene.Lines.ToList(); at = 0; Stand(lines[0], true); Show(true); status.Text = "";
         }
         catch (OperationCanceledException) { status.Text = "장면 만들기를 멈췄어요. 저장하지 않았습니다."; Restore(); }
         catch (Exception e) { status.Text = "장면을 받지 못했어요. " + e.Message; Restore(); }
         finally
         {
-            request?.Dispose(); request = null; busy = false; go.IsEnabled = Ready; stop.IsEnabled = false; first.IsEnabled = second.IsEnabled = kind.IsEnabled = input.IsEnabled = true;
+            request?.Dispose(); request = null; busy = false; go.IsEnabled = Ready; again.IsEnabled = Ready && buddy.StageTalks.Turns(Thread).Count > 0; stop.IsEnabled = false; first.IsEnabled = second.IsEnabled = kind.IsEnabled = input.IsEnabled = true;
             if (IsVisible) input.Focus();
         }
+        return played;
     }
     void Restore() { if (lines.Count > 0) { at = Math.Clamp(at, 0, lines.Count - 1); Show(false); } else view.Present(A.Name, "……", false); }
 }

@@ -10,7 +10,36 @@ namespace KeyboardWorker;
 // the ordinary chat with the desktop pets is set elsewhere and is not touched here.
 public sealed class StageTalkPanel : StackPanel
 {
-    public StageTalkPanel(Buddy buddy, bool texting, Action<string> say)
+    // What only text messages have: the texting way of writing, how many messages are kept, and the picture behind them.
+    void Texting(Buddy buddy, StageTalkOptions options, Window owner, Action<string> say)
+    {
+        var state = buddy.Stage.State;
+        Children.Add(Pastel.Text("문자 말투", 14));
+        var slang = new CheckBox { Content = "문자에서만 쓰는 표현 허용 (ㅋㅋ, ㅎㅎ, ㅠㅠ, ^^ 등)", IsChecked = options.Slang, Margin = new Thickness(0, 2, 0, 2) }; Children.Add(slang);
+        slang.Click += (_, _) => { options.Slang = slang.IsChecked == true; buddy.Stage.Save(); say(options.Slang ? "캐릭터에게 어울릴 때 문자 표현을 써요." : "문자 표현 없이 평소 말투로만 써요."); };
+        Children.Add(Pastel.Text("켜 두어도 캐릭터의 성격과 말투에 어울릴 때만 씁니다. 끄면 어떤 캐릭터도 쓰지 않아요. 이모티콘은 이 설정과 상관없이 가끔만 쓰도록 되어 있습니다.", 11));
+
+        Children.Add(Pastel.Text("문자 보관", 14));
+        var row = new StackPanel { Orientation = Orientation.Horizontal }; var limit = new ComboBox { ItemsSource = StageLog.Limits, SelectedItem = StageLog.Limits.Contains(options.KeepTurns) ? options.KeepTurns : StageLog.Keep, MinWidth = 90 };
+        row.Children.Add(new TextBlock { Text = "방마다 최근", Foreground = Pastel.Ink, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) }); row.Children.Add(limit);
+        row.Children.Add(new TextBlock { Text = "개까지 보관 (넘으면 오래된 것부터 자동으로 지워져요. 모아 둔 것은 남아요.)", Foreground = Pastel.Ink, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) }); Children.Add(row);
+        limit.SelectionChanged += (_, _) => { if (limit.SelectedItem is int value) { options.KeepTurns = value; buddy.Stage.Save(); say("문자는 방마다 최근 " + value + "개까지 보관해요."); } };
+
+        Children.Add(Pastel.Text("문자방 배경", 14));
+        var now = Pastel.Text("", 12); void Show() => now.Text = state.TextBackdrop.Length > 0 ? "배경 사진을 쓰는 중이에요." : "배경 없이 테마 색으로 보여요."; Show();
+        var buttons = new WrapPanel();
+        buttons.Children.Add(Pastel.Button("배경 사진 고르기…", async () =>
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog { Title = "문자방 배경 선택", Filter = "이미지 (PNG / JPG)|*.png;*.jpg;*.jpeg", CheckFileExists = true }; if (dialog.ShowDialog(owner) != true) return;
+            string root = Storage.Root, file = dialog.FileName; owner.IsEnabled = false; say("배경을 넣는 중…");
+            // The picture is stored shrunk to what a screen needs, like the backgrounds of the pages.
+            try { state.TextBackdrop = await System.Threading.Tasks.Task.Run(() => StageAssets.ImportBackground(file, root)); buddy.Stage.Save(); say("문자방 배경을 바꿨어요."); }
+            catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or System.IO.InvalidDataException or System.IO.FileFormatException) { say("배경을 넣지 못했어요. " + e.Message); }
+            finally { owner.IsEnabled = true; Show(); }
+        }));
+        buttons.Children.Add(Pastel.Button("배경 없애기", () => { state.TextBackdrop = ""; buddy.Stage.Save(); Show(); say("배경을 없앴어요."); }, true)); Children.Add(buttons); Children.Add(now);
+    }
+    public StageTalkPanel(Buddy buddy, bool texting, Window owner, Action<string> say)
     {
         var options = texting ? buddy.Stage.State.Texting : buddy.Stage.State.Talk; var mode = texting ? buddy.TextModeNow : buddy.StageModeNow;
         string standard = texting ? StageTalkOptions.StandardTextPrompt : StageTalkOptions.StandardPrompt;
@@ -39,7 +68,7 @@ public sealed class StageTalkPanel : StackPanel
             say("대화 설정을 저장했어요 ♡ " + DateTime.Now.ToString("HH:mm:ss"));
         }));
         buttons.Children.Add(Pastel.Button("기본 프롬프트로", () => { prompt.Text = standard; say("'저장'을 눌러야 적용돼요."); }, true)); Children.Add(buttons);
-        if (texting) return;
+        if (texting) { Texting(buddy, options, owner, say); return; }
 
         Children.Add(Pastel.Text("둘만의 페이지 프롬프트", 14));
         Children.Add(Pastel.Text("두 캐릭터가 나 없이 이야기하는 '둘만의 페이지'에 쓰입니다. 넣을 수 있는 말: {first_name} · {second_name} · {length} · {turns}(주고받는 횟수 — 길이에 따라 2~8). 두 사람의 프로필과 관계 설정은 앞에 항상 붙어요.", 11));

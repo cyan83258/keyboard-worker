@@ -37,6 +37,7 @@ public sealed class StageTalkOptions
     public string Length { get; set; } = "중간";
     public int MaxTokens { get; set; } = 2048;      // room for the answer (models that think first use part of it)
     public int ContextTurns { get; set; } = 12;     // how many earlier exchanges the character is shown
+    public bool Slang { get; set; } = true;        // text messages only: ㅋㅋ, ^^ and the like may be used
     public int KeepTurns { get; set; } = StageLog.Keep;   // how many exchanges a thread keeps before the oldest are dropped
     public string Prompt { get; set; } = StandardPrompt;
     // The page for two: the two characters talk to each other and the user is not there.
@@ -56,7 +57,7 @@ public sealed class StageTalkOptions
     public void Normalize(string standard = StandardPrompt)
     {
         if (Lengths.All(l => l.Name != Length)) Length = "중간";
-        MaxTokens = Math.Clamp(MaxTokens, 256, 16000); ContextTurns = Math.Clamp(ContextTurns, 0, 60); KeepTurns = Math.Clamp(KeepTurns, 50, StageLog.MaxKeep);
+        MaxTokens = Math.Clamp(MaxTokens, 256, 16000); ContextTurns = Math.Clamp(ContextTurns, 0, 60); KeepTurns = Math.Clamp(KeepTurns, 30, StageLog.MaxKeep);
         Prompt = string.IsNullOrWhiteSpace(Prompt) ? standard : Prompt[..Math.Min(Prompt.Length, 10000)];
         PairPrompt = string.IsNullOrWhiteSpace(PairPrompt) ? StandardPairPrompt : PairPrompt[..Math.Min(PairPrompt.Length, 10000)];
     }
@@ -67,7 +68,7 @@ public sealed class StageTalkOptions
 public sealed class StageLog
 {
     public const int Keep = 300, MaxKeep = 2000, MaxAnswer = 8000;
-    public static readonly int[] Limits = { 100, 200, 300, 500, 1000 };
+    public static readonly int[] Limits = { 30, 50, 100, 200, 300, 500, 1000 };
     // How many exchanges a thread keeps; the oldest go first when one more is added.
     public int Limit { get; set; } = Keep;
     readonly string path; readonly Dictionary<string, List<ChatTurn>> threads;

@@ -24,7 +24,7 @@ public sealed class StageSettingsWindow : Window
         var footer = new StackPanel(); footer.Children.Add(status); footer.Children.Add(Pastel.Button("닫기", Close, true)); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer); root.Children.Add(tabs);
         void Tab(string title, Func<UIElement> content) => tabs.Items.Add(new TabItem { Header = title, Tag = content, Padding = new Thickness(14, 8, 14, 8) });
         void Build() { if (tabs.SelectedItem is TabItem { Tag: Func<UIElement> make } tab) { tab.Tag = null; var p = new StackPanel { Margin = new Thickness(18) }; p.Children.Add(make()); tab.Content = Pastel.Scroll(p); } }
-        Tab("대화 · 프롬프트", () => new StageTalkPanel(buddy, texting, text => status.Text = text));
+        Tab("대화 · 프롬프트", () => new StageTalkPanel(buddy, texting, this, text => status.Text = text));
         // Text messages have no pictures: their settings are the talk alone.
         if (!texting) { Tab("스탠딩 그림", () => new SpriteList(buddy, character, this, text => status.Text = text)); Tab("배경", () => new BackdropList(buddy, this, text => status.Text = text)); }
         tabs.SelectionChanged += (_, e) => { if (ReferenceEquals(e.OriginalSource, tabs)) Build(); }; tabs.SelectedIndex = 0; Build();

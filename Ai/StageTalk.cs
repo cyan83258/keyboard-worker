@@ -35,12 +35,26 @@ public static class StageTalk
     // The page's instruction: its prompt with the names and the wanted length filled in, then what the mode adds.
     public static string Instruction(StageTalkOptions options, StageMode mode, Persona persona) =>
 (mode.Layout == StageMode.Messenger ? "\n[문자 메시지]\n" : "\n[캐릭터 페이지의 대화]\n") + PromptTemplates.Expand(options.Prompt, new Dictionary<string, string> { ["name"] = persona.Name, ["user_name"] = persona.UserName ?? "", ["length"] = StageTalkOptions.Guide(mode.Length.Length > 0 ? mode.Length : options.Length) }).Trim() + mode.Prompt;
+    // A picture character (😊, ❤): outside the basic plane, or one of the symbol blocks that are drawn as emoji.
+    // Hearts, stars and notes drawn as plain type (♡ ★ ♪) are part of many characters' way of writing and do not count.
+    public static bool HasEmoji(string text) { foreach (char c in text) if (char.IsSurrogate(c) || (c >= 0x2600 && c <= 0x27BF && !"♡♥★☆♪♬♩♫".Contains(c)) || c == 0xFE0F) return true; return false; }
+    // What text messages can and cannot be, whatever the user's prompt says. slang: ㅋㅋ, ^^ and the like may be used.
+    // Emoji are held back by looking at the last answer: one that had them is followed by one without, so they never become a habit.
+    public static string TextRules(bool slang, IReadOnlyList<ChatTurn> earlier) =>
+        "\n[문자 메시지의 규칙]"
+        + "\n- 두 사람은 지금 서로 다른 곳에 있고, 오가는 것은 휴대폰 문자뿐입니다. 캐릭터도 이것이 문자 대화라는 것을 알고 있습니다."
+        + "\n- 문자로는 할 수 없는 일을 하지 않습니다: 쓰다듬기·안기·손잡기 같은 접촉, 상대의 표정이나 모습을 보는 것, 이 대화 중에 찾아가거나 눈앞에 나타나는 것. 만나자는 약속이나 보고 싶다는 말은 할 수 있지만, 실제로 만난 것처럼 쓰지 않습니다."
+        + "\n- (괄호) 지문과 행동 묘사를 쓰지 않습니다. 보낼 수 있는 것은 글자와 이모티콘뿐입니다."
+        + (slang ? "\n- 문자에서만 쓰는 표현(ㅋㅋ, ㅎㅎ, ㅠㅠ, ^^, ;; 등)은 이 캐릭터의 성격·나이·말투에 어울릴 때만, 어울리는 만큼 씁니다. 어울리지 않는 캐릭터는 쓰지 않습니다."
+                 : "\n- ㅋㅋ, ㅎㅎ, ㅠㅠ, ^^, ;; 같은 문자 전용 표현은 쓰지 않습니다. 평소 말투 그대로 글로 씁니다.")
+        + "\n- 이모티콘(😊 같은 그림 문자)은 가끔만 씁니다. 사용자가 이모티콘을 보냈다고 따라 붙이지 않고, 대부분의 답장은 이모티콘 없이 씁니다."
+        + (earlier.Count > 0 && HasEmoji(earlier[^1].Assistant) ? "\n- 바로 앞 답장에 이모티콘을 썼습니다. 이번 답장에는 이모티콘을 하나도 쓰지 않습니다." : "");
     public static async Task<StageReply> Send(StageLog log, ChatPreferences preferences, Persona persona, string thread, string text, string state, StageScene scene, StageTalkOptions options, StageMode mode, CancellationToken cancellation, Action<string>? progress = null, AiClient? client = null)
     {
         if (string.IsNullOrWhiteSpace(text) || text.Length > 6000) throw new InvalidOperationException("메시지는 1~6000자로 입력해 주세요.");
         var settings = ChatRepository.Clone(preferences); settings.Profile = persona.Snapshot(); settings.Profile.Prompts = (settings.Profile.Prompts ?? new()).Normalize(); settings.UsageKind = "ChatStage";
         settings.MaxOutputTokens = options.MaxTokens; string name = settings.Profile.Name; bool pictured = mode.Layout == StageMode.Stage;
-        settings.Profile.Extra += Instruction(options, mode, settings.Profile) + state + scene.Note + (pictured ? StageTags.Instruction(scene.Pictures) + StageTags.BackdropInstruction(scene.Backdrops, scene.Backdrop) : "");
+        settings.Profile.Extra += Instruction(options, mode, settings.Profile) + (pictured ? "" : TextRules(options.Slang, log.Turns(thread))) + state + scene.Note + (pictured ? StageTags.Instruction(scene.Pictures) + StageTags.BackdropInstruction(scene.Backdrops, scene.Backdrop) : "");
         string answer = await (client ?? new AiClient()).Send(settings, Context(log, thread, name, scene.Others, options.ContextTurns), text.Trim(), cancellation, progress == null ? null : partial => progress(Shown(partial, name)));
         cancellation.ThrowIfCancellationRequested();
         // The model may still add the expression mark it knows from ordinary chat; that goes as well.

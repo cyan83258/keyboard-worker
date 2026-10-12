@@ -20,19 +20,21 @@ public sealed class StageHistoryWindow : Window
     readonly TextBox search = new() { Padding = new Thickness(8, 5, 8, 5) }; readonly StackPanel list = new(), tidy = new() { Orientation = Orientation.Horizontal };
     readonly TextBlock count = Pastel.Text("", 12), status = Pastel.Text("", 12); readonly Button talksTab, clipsTab, import;
     sealed record Choice(string Key, string Label);
-    bool kept, filling;
+    readonly bool texting; bool kept, filling;
     string Thread => (threads.SelectedItem as Choice)?.Key ?? "";
-    public StageHistoryWindow(Buddy buddy, string thread, bool showKept = false)
+    // texting: opened from the text messages, which keep no record here - only what was set aside there is shown.
+    // The pages' record in turn shows nothing of the text messages.
+    public StageHistoryWindow(Buddy buddy, string thread, bool showKept = false, bool texting = false)
     {
-        this.buddy = buddy; log = buddy.StageTalks; clips = buddy.StageClips; kept = showKept; var root = new DockPanel { Margin = new Thickness(20) };
+        this.buddy = buddy; this.texting = texting; log = buddy.StageTalks; clips = buddy.StageClips; kept = showKept || texting; var root = new DockPanel { Margin = new Thickness(20) };
         var top = new StackPanel(); DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
         var tabs = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
-        talksTab = Pastel.Button("대화 기록", () => View(false)); clipsTab = Pastel.Button("모아 둔 것", () => View(true)); tabs.Children.Add(talksTab); tabs.Children.Add(clipsTab); top.Children.Add(tabs);
+        talksTab = Pastel.Button("대화 기록", () => View(false)); clipsTab = Pastel.Button("모아 둔 것", () => View(true)); tabs.Children.Add(talksTab); tabs.Children.Add(clipsTab); top.Children.Add(tabs); if (texting) talksTab.Visibility = Visibility.Collapsed;
         var pick = new DockPanel { Margin = new Thickness(0, 0, 0, 6) }; DockPanel.SetDock(threads, Dock.Left); threads.Margin = new Thickness(0, 0, 8, 0); pick.Children.Add(threads); search.ToolTip = "낱말로 찾기 (띄어쓰기로 여러 낱말)"; pick.Children.Add(search);
         top.Children.Add(pick); top.Children.Add(count);
 
         var footer = new StackPanel(); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer); footer.Children.Add(status);
-        keep.ItemsSource = new[] { "최근 50개만 남기기", "최근 100개만 남기기", "최근 200개만 남기기", "모두 지우기" }; keep.SelectedIndex = 1; keep.VerticalAlignment = limit.VerticalAlignment = VerticalAlignment.Center;
+        keep.ItemsSource = new[] { "최근 30개만 남기기", "최근 50개만 남기기", "최근 100개만 남기기", "최근 200개만 남기기", "모두 지우기" }; keep.SelectedIndex = 2; keep.VerticalAlignment = limit.VerticalAlignment = VerticalAlignment.Center;
         limit.ItemsSource = StageLog.Limits; limit.SelectedItem = StageLog.Limits.Contains(log.Limit) ? log.Limit : StageLog.Keep; limit.ToolTip = "대화마다 이 개수를 넘으면 가장 오래된 것부터 자동으로 지워져요. 모아 둔 것은 지워지지 않아요.";
         tidy.Children.Add(keep); tidy.Children.Add(Pastel.Button("정리", Tidy, true));
         tidy.Children.Add(new TextBlock { Text = "자동 보관 한도", Foreground = Pastel.Ink, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 6, 0) }); tidy.Children.Add(limit);
@@ -49,7 +51,7 @@ public sealed class StageHistoryWindow : Window
         threads.SelectionChanged += (_, _) => { if (!filling) Refresh(); }; search.TextChanged += (_, _) => Refresh();
         limit.SelectionChanged += (_, _) => { if (limit.SelectedItem is int value) { buddy.Stage.State.Talk.KeepTurns = value; buddy.Stage.Save(); log.Limit = value; status.Text = "앞으로 대화마다 최근 " + value + "개까지 보관해요."; } };
         log.Changed += Refresh; clips.Changed += Refresh; Closed += (_, _) => { log.Changed -= Refresh; clips.Changed -= Refresh; };
-        Pastel.Window(this, "대화 기록", root, 720, 820); MinWidth = 560; MinHeight = 480; Refresh();
+        Pastel.Window(this, texting ? "모아 둔 문자" : "대화 기록", root, 720, 820); MinWidth = 560; MinHeight = 480; Refresh();
     }
     // A thread's key in words: whose page, and which mode ("pair:" is the page for two).
     public static new string Title(string key, IReadOnlyList<Buddy.StageCharacter> people, IReadOnlyList<StageMode> modes)
@@ -63,10 +65,12 @@ public sealed class StageHistoryWindow : Window
     bool Busy() { if (!buddy.IsChatBusy) return false; status.Text = "답변을 만드는 중이에요. 끝난 뒤에 다시 해 주세요."; return true; }
 
     ChatTurn[] Found() => ChatSearchWindow.Find(log.Turns(Thread), search.Text);
+    // The clips of this side only: text messages and pages do not see each other's.
+    IEnumerable<StageClip> Mine() => clips.Items.Where(c => (StageMode.Kind(c.Thread) == StageMode.Messenger) == texting);
     StageClip[] FoundClips()
     {
         var words = search.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return clips.Items.Where(c => words.All(w => c.Text.Contains(w, StringComparison.OrdinalIgnoreCase) || c.User.Contains(w, StringComparison.OrdinalIgnoreCase) || c.Name.Contains(w, StringComparison.OrdinalIgnoreCase))).ToArray();
+        return Mine().Where(c => words.All(w => c.Text.Contains(w, StringComparison.OrdinalIgnoreCase) || c.User.Contains(w, StringComparison.OrdinalIgnoreCase) || c.Name.Contains(w, StringComparison.OrdinalIgnoreCase))).ToArray();
     }
     static TextBox Line(string text) => new() { Text = text, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(0), Background = Brushes.Transparent, Foreground = Pastel.Ink, FontSize = 13, Padding = new Thickness(0), Margin = new Thickness(0, 3, 0, 0), MaxHeight = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     static Button Small(string text, Action action, string tip) { var button = Pastel.Button(text, action, true); button.Padding = new Thickness(9, 2, 9, 3); button.Margin = new Thickness(4, 0, 0, 0); button.FontSize = 11.5; button.ToolTip = tip; return button; }
@@ -77,7 +81,7 @@ public sealed class StageHistoryWindow : Window
     }
     void Refresh()
     {
-        list.Children.Clear(); talksTab.Opacity = kept ? .6 : 1; clipsTab.Opacity = kept ? 1 : .6; clipsTab.Content = "모아 둔 것 (" + clips.Items.Count + ")";
+        list.Children.Clear(); talksTab.Opacity = kept ? .6 : 1; clipsTab.Opacity = kept ? 1 : .6; clipsTab.Content = "모아 둔 것 (" + Mine().Count() + ")";
         threads.Visibility = tidy.Visibility = import.Visibility = kept ? Visibility.Collapsed : Visibility.Visible;
         if (kept) { Kept(); return; }
         string thread = Thread; bool pair = thread.StartsWith("pair:", StringComparison.Ordinal); int total = log.Turns(thread).Count; var found = Found().Reverse().ToArray();
@@ -100,8 +104,8 @@ public sealed class StageHistoryWindow : Window
     }
     void Kept()
     {
-        var found = FoundClips().Reverse().ToArray(); count.Text = $"모아 둔 것 {found.Length}개" + (search.Text.Trim().Length > 0 ? $" / {clips.Items.Count}개" : "") + " · 대화를 정리하거나 지워도 여기 있는 것은 남아요";
-        if (found.Length == 0) { list.Children.Add(Pastel.Text(clips.Items.Count == 0 ? "아직 모아 둔 것이 없어요. '대화 기록'에서 ☆ 담기나 발췌를 눌러 보세요." : "맞는 것이 없어요.", 13)); return; }
+        var found = FoundClips().Reverse().ToArray(); count.Text = $"모아 둔 것 {found.Length}개" + (search.Text.Trim().Length > 0 ? $" / {Mine().Count()}개" : "") + " · 대화를 정리하거나 지워도 여기 있는 것은 남아요";
+        if (found.Length == 0) { list.Children.Add(Pastel.Text(!Mine().Any() ? (texting ? "아직 모아 둔 문자가 없어요. 답장 아래의 ☆ 나 ✂ 를 눌러 보세요." : "아직 모아 둔 것이 없어요. '대화 기록'에서 ☆ 담기나 발췌를 눌러 보세요.") : "맞는 것이 없어요.", 13)); return; }
         foreach (var clip in found.Take(Shown))
         {
             var entry = new StackPanel();
@@ -121,7 +125,7 @@ public sealed class StageHistoryWindow : Window
     }
     void Tidy()
     {
-        if (Busy()) return; string thread = Thread; int total = log.Turns(thread).Count, left = keep.SelectedIndex switch { 0 => 50, 1 => 100, 2 => 200, _ => 0 };
+        if (Busy()) return; string thread = Thread; int total = log.Turns(thread).Count, left = keep.SelectedIndex switch { 0 => 30, 1 => 50, 2 => 100, 3 => 200, _ => 0 };
         if (total <= left) { status.Text = "정리할 것이 없어요. (대화 " + total + "개)"; return; }
         if (MessageBox.Show(this, (left == 0 ? "이 대화를 모두 지울까요?" : $"오래된 대화 {total - left}개를 지우고 최근 {left}개만 남길까요?") + "\n'모아 둔 것'은 지워지지 않아요.", "대화 정리", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
         status.Text = log.Trim(thread, left) + "개 대화를 정리했어요.";

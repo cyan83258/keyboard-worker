@@ -71,7 +71,7 @@ public static class StageTests
         Check(refusalCount == 4, "A file that is not a fewKept is refused with a message");
         Check(care.Trim("g", 0) == 50 && care.Threads.Count == 0, "A thread tidied to nothing is gone");
         var fewKept = new StageTalkOptions { KeepTurns = 5 }; fewKept.Normalize(); var manyKept = new StageTalkOptions { KeepTurns = 99999 }; manyKept.Normalize();
-        Check(fewKept.KeepTurns == 50 && manyKept.KeepTurns == StageLog.MaxKeep && new StageTalkOptions().KeepTurns == StageLog.Keep, "The limit stays within bounds");
+        Check(fewKept.KeepTurns == 30 && manyKept.KeepTurns == StageLog.MaxKeep && new StageTalkOptions().KeepTurns == StageLog.Keep, "The limit stays within bounds");
 
         // What the user sets aside is a copy that outlives the fewKept
         var setAside = new StageClips(careHome); var likedTurn = new ChatTurn("좋아하는 말", "(웃으며) 잊지 마라. 이건 약속이다.", careDay, "루카", "g"); int clipCount = 0; setAside.Changed += () => clipCount++;

@@ -41,7 +41,8 @@ public sealed class StageState
     public string Mode { get; set; } = "";                       // the mode of the character page, when a mod added one (see StageMode)
     public StageTalkOptions Texting { get; set; } = StageTalkOptions.Texting();   // the same for text messages, which share nothing with the pages
     public string TextMode { get; set; } = "";
-    public StageState Snapshot() => new() { Talk = Talk.Snapshot(), Mode = Mode, Texting = Texting.Snapshot(), TextMode = TextMode, Sets = (Sets ?? new()).ToDictionary(p => p.Key, p => p.Value.Snapshot()), Backdrops = Backdrops.Select(b => b.Snapshot()).ToList(), Backdrop = Backdrop, AutoBackdrop = AutoBackdrop, FoldSprites = FoldSprites, FoldBackdrops = FoldBackdrops };
+    public string TextBackdrop { get; set; } = "";               // the picture behind the text messages; empty = plain
+    public StageState Snapshot() => new() { Talk = Talk.Snapshot(), Mode = Mode, Texting = Texting.Snapshot(), TextMode = TextMode, TextBackdrop = TextBackdrop, Sets = (Sets ?? new()).ToDictionary(p => p.Key, p => p.Value.Snapshot()), Backdrops = Backdrops.Select(b => b.Snapshot()).ToList(), Backdrop = Backdrop, AutoBackdrop = AutoBackdrop, FoldSprites = FoldSprites, FoldBackdrops = FoldBackdrops };
 }
 
 // The pictures of the character pages (stage.json). The files themselves are copies in the images folder.
@@ -83,7 +84,7 @@ public sealed class StageBook
         string file = Path.Combine(root, "stage.json"); var state = Storage.ReadJson<StageState>(file, 4 * 1024 * 1024) ?? new();
         // The first version of the file was just the sets, each with its own backgrounds.
         if (state.Sets == null && File.Exists(file)) state.Sets = Storage.ReadJson<Dictionary<string, StageSet>>(file, 4 * 1024 * 1024);
-        state.Sets ??= new(); state.Backdrops ??= new(); state.Talk ??= new(); state.Mode ??= ""; state.Texting ??= StageTalkOptions.Texting(); state.TextMode ??= "";
+        state.Sets ??= new(); state.Backdrops ??= new(); state.Talk ??= new(); state.Mode ??= ""; state.Texting ??= StageTalkOptions.Texting(); state.TextMode ??= ""; state.TextBackdrop = SafeFiles.IsNetworkPath(state.TextBackdrop ?? "") ? "" : state.TextBackdrop ?? "";
         foreach (var key in state.Sets.Keys.ToArray()) if (state.Sets[key] == null) state.Sets.Remove(key);
         foreach (var set in state.Sets.Values)
         {
@@ -136,5 +137,5 @@ public sealed class StageBook
     public void Save() { Fit(State); OrderedStore.SaveJson(path, State.Snapshot()); Changed?.Invoke(); }
     // Every file a page uses, so that tidying up never takes one away.
     public static IEnumerable<string> Files(StageState? state) =>
-        state == null ? Array.Empty<string>() : (state.Sets ?? new()).Values.Where(s => s != null).SelectMany(s => (s.Sprites ?? new()).Where(p => p != null).Select(p => p.Path)).Concat((state.Backdrops ?? new()).Where(b => b != null).Select(b => b.Path));
+        state == null ? Array.Empty<string>() : (state.Sets ?? new()).Values.Where(s => s != null).SelectMany(s => (s.Sprites ?? new()).Where(p => p != null).Select(p => p.Path)).Concat((state.Backdrops ?? new()).Where(b => b != null).Select(b => b.Path)).Concat(string.IsNullOrEmpty(state.TextBackdrop) ? Array.Empty<string>() : new[] { state.TextBackdrop });
 }
