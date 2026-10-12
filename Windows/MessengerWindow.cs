@@ -49,7 +49,7 @@ public sealed class MessengerWindow : Window
         who.SelectionChanged += (_, _) => { if (!filling && who.SelectedItem != null) Enter(); };
         modes.SelectionChanged += (_, _) => { if (filling || modes.SelectedItem is not StageMode chosen) return; mode = chosen; buddy.Stage.State.TextMode = chosen.Id; buddy.Stage.Save(); Enter(); };
         Closed += (_, _) => request?.Cancel();
-        Pastel.Window(this, "문자 메시지", frame.Shell, 1040, 820); MinWidth = 820; MinHeight = 520; Enter();
+        Pastel.Window(this, "문자 메시지", frame.Shell, 1120, 820, PageFrame.Sky); MinWidth = 820; MinHeight = 520; Enter();
         Loaded += (_, _) => input.Focus();
     }
     public void Select(string id) { foreach (Choice choice in who.Items) if (choice.Character.Id == id) { who.SelectedItem = choice; return; } }

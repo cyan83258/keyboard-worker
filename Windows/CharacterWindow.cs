@@ -54,7 +54,7 @@ public sealed class CharacterWindow : Window
         who.SelectionChanged += (_, _) => { if (!filling && who.SelectedItem != null) Enter(); };
         modes.SelectionChanged += (_, _) => { if (filling || modes.SelectedItem is not StageMode chosen) return; mode = chosen; buddy.Stage.State.Mode = chosen.Id; buddy.Stage.Save(); Enter(); };
         buddy.Adventure.Changed += Closeness; Closed += (_, _) => { buddy.Adventure.Changed -= Closeness; request?.Cancel(); };
-        Pastel.Window(this, "캐릭터 페이지", frame.Shell, 1120, 820); MinWidth = 900; MinHeight = 560; Fonts(); Enter();
+        Pastel.Window(this, "캐릭터 페이지", frame.Shell, 1120, 820, PageFrame.Sky); MinWidth = 900; MinHeight = 560; Fonts(); Enter();
         Loaded += (_, _) => input.Focus(); Activated += (_, _) => Fonts();
     }
     public void Select(string id) { foreach (Choice choice in who.Items) if (choice.Character.Id == id) { who.SelectedItem = choice; return; } }

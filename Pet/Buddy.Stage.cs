@@ -111,12 +111,24 @@ public sealed partial class Buddy
     Window? pairStage, messenger;
     public void OpenMessenger(string? id = null) { Open(ref messenger, () => new MessengerWindow(this), w => messenger = w); if (id != null) (messenger as MessengerWindow)?.Select(id); }
     // The tabs of the page windows: the other page opens where this one stood, and this one closes.
+    // The new one takes the old one's place and size before it is first shown, and the old one only goes once the new one
+    // has been drawn - so the screen never shows a window jumping into place or the desktop in between.
+    Window? placeLike;
+    static void Place(Window window, Window like)
+    {
+        window.WindowStartupLocation = WindowStartupLocation.Manual;
+        if (like.WindowState == WindowState.Normal) { window.Left = like.Left; window.Top = like.Top; window.Width = Math.Max(window.MinWidth, like.Width); window.Height = Math.Max(window.MinHeight, like.Height); }
+        window.WindowState = like.WindowState;
+    }
     public void SwitchPage(Window from, string kind, string? id)
     {
-        if (kind == StageMode.Pair) OpenPairPage(); else if (kind == StageMode.Messenger) OpenMessenger(id); else OpenCharacter(id);
-        var target = kind == StageMode.Pair ? pairStage : kind == StageMode.Messenger ? messenger : characterWindow; if (target == null || ReferenceEquals(target, from)) return;
-        if (from.WindowState == WindowState.Normal) { target.Left = from.Left; target.Top = from.Top; target.Width = Math.Max(target.MinWidth, from.Width); target.Height = Math.Max(target.MinHeight, from.Height); }
-        target.WindowState = from.WindowState; from.Close();
+        Window? Target() => kind == StageMode.Pair ? pairStage : kind == StageMode.Messenger ? messenger : characterWindow;
+        bool fresh = Target() == null; placeLike = from;
+        try { if (kind == StageMode.Pair) OpenPairPage(); else if (kind == StageMode.Messenger) OpenMessenger(id); else OpenCharacter(id); } finally { placeLike = null; }
+        var target = Target(); if (target == null || ReferenceEquals(target, from)) return;
+        if (!fresh) { Place(target, from); from.Close(); return; }
+        void Leave(object? sender, EventArgs e) { target.ContentRendered -= Leave; from.Close(); target.Activate(); }
+        target.ContentRendered += Leave;
     }
     public void OpenPairPage() => Open(ref pairStage, () => new PairStageWindow(this), w => pairStage = w);
     public void OpenFonts(Window? owner = null) { var window = new FontWindow(this) { ShowInTaskbar = false }; if (owner != null) window.Owner = owner; window.ShowDialog(); }

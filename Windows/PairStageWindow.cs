@@ -50,7 +50,7 @@ public sealed class PairStageWindow : Window
         filling = true; first.ItemsSource = people; second.ItemsSource = people; first.SelectedIndex = 0; second.SelectedIndex = people.Length > 1 ? 1 : 0; filling = false;
         first.SelectionChanged += (_, _) => { if (!filling) Enter(); }; second.SelectionChanged += (_, _) => { if (!filling) Enter(); };
         buddy.Adventure.Changed += Closeness; Closed += (_, _) => { buddy.Adventure.Changed -= Closeness; request?.Cancel(); };
-        Pastel.Window(this, "둘만의 페이지", page.Shell, 1140, 840); MinWidth = 900; MinHeight = 560;
+        Pastel.Window(this, "둘만의 페이지", page.Shell, 1120, 820, PageFrame.Sky); MinWidth = 900; MinHeight = 560;
         view.SetFont(FontAssets.Get(buddy.Pref.StageFontPath), buddy.Pref.StageFontSize); Activated += (_, _) => view.SetFont(FontAssets.Get(buddy.Pref.StageFontPath), buddy.Pref.StageFontSize);
         Enter(); Loaded += (_, _) => input.Focus();
     }

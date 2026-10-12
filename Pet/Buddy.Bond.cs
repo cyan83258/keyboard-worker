@@ -151,7 +151,10 @@ public sealed partial class Buddy
     void Open(ref Window? slot, Func<Window> make, Action<Window?> clear)
     {
         if (slot != null) { Pastel.Front(slot); return; }
-        var window = make(); slot = window; window.Closed += (_, _) => clear(null); window.Show();
+        var window = make(); slot = window; window.Closed += (_, _) => clear(null);
+        // Opened in place of another window (see SwitchPage): it is put there before it is first drawn, so nothing jumps.
+        if (placeLike is { } like) Place(window, like);
+        window.Show();
     }
     public void OpenLineBook() => Open(ref lineBookWindow, () => new LineBookWindow(this), w => lineBookWindow = w);
     public void OpenVoices() => Open(ref voiceWindow, () => new VoiceWindow(this), w => voiceWindow = w);
