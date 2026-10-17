@@ -62,11 +62,9 @@ public static class NovelTests
         Check(tail[^2] == new PromptMessage(PromptMessage.User, "둘이 화해한다") && tail[^1] == new PromptMessage(PromptMessage.Assistant, "루카은(는)") && tail.Any(m => m.Text.StartsWith("[사용자(나)]") && m.Text.Contains("고양이")), "Without the marker the story goes at the end; a prefill is the model's first words; the persona is told");
         Check(NovelPrompts.Fill("{{char}}·{{user}}·{{group}}·{{unknown}}", scene) == "루카·나·루카, 미오·{{unknown}}" && NovelPrompts.Normalize(null).Parts.Any(p => p.Identifier == "chatHistory") && NovelPrompts.Normalize(new NovelPromptSet { Parts = new() { new NovelPromptPart { Role = "weird", Content = null! } } }).Parts.Single() is { Role: PromptMessage.System, Content: "", Name: "프롬프트" }, "Unknown macros stay; an empty set falls back to the standard one; parts are cleaned");
 
-        // ---- a guide for one part, going on, and the prompt shaped as SillyTavern does ----
-        var guided = NovelPrompts.Build(set, scene with { Guide = "{{char}}이(가) 먼저 사과한다" });
-        int asked = guided.FindIndex(m => m.Text == "둘이 화해한다");
-        Check(guided[asked + 1] == new PromptMessage(PromptMessage.System, "[다음 전개 지시 · 이번 장면에만 적용]\n루카이(가) 먼저 사과한다") && !messages.Any(m => m.Text.Contains("다음 전개 지시")), "A guide follows what is asked now, and only when there is one");
-        Check(NovelPrompts.Build(set, scene with { Direction = NovelPrompts.Continue }).Any(m => m.Text == NovelPrompts.Continue), "Going on asks the model to continue the last part");
+        // ---- every direction goes as the input of its part, how many parts fit, and the prompt shaped as SillyTavern does ----
+        Check(messages.Count(m => m.Role == PromptMessage.User && m.Text.StartsWith("지시 ")) == 5 && !messages.Any(m => m.Text.Contains("다음 전개 지시")), "Every earlier direction is sent as the input of its part");
+        Check(NovelPrompts.Kept(set, scene) == 6 && NovelPrompts.Kept(set, scene, limit, 300) == 2, "How many parts go is told as the request is built");
         var raw = new[] { new PromptMessage("system", "a"), new PromptMessage("system", "b"), new PromptMessage("user", "c"), new PromptMessage("user", "d"), new PromptMessage("assistant", "e") };
         Check(NovelPrompts.Shape(raw, true, false, false).Count == 5 && NovelPrompts.Shape(raw, true, true, false).Select(m => m.Text).SequenceEqual(new[] { "a\n\nb", "c", "d", "e" }) && NovelPrompts.Shape(raw, true, false, true).Select(m => m.Text).SequenceEqual(new[] { "a\n\nb", "c\n\nd", "e" }), "System messages in a row can be squashed, any role in a row merged");
         Check(NovelPrompts.Shape(raw, false, false, false).All(m => m.Role != "system") && NovelPrompts.Shape(raw, false, false, true).First() == new PromptMessage("user", "a\n\nb\n\nc\n\nd"), "Without a system prompt, system messages go as the user's");
@@ -133,7 +131,7 @@ public static class NovelTests
         Check(digest.StartsWith("[시나리오 요약]") && digest.IndexOf("### #1~3") < digest.IndexOf("### #4~6") && sent.Length == 6 && sent[0].Assistant == "부분 7", "Summarized parts go as their summaries, the rest as they are");
         Check(NovelSummaries.Apply(options, parts.Take(5).ToArray(), summarized).Story.Length == 2, "The newest parts are sent as they are even when summarized");
         Check(NovelSummaries.Apply(new NovelSummaryOptions { Inject = false }, parts, summarized).Story.Length == 12 && NovelSummaries.Apply(new NovelSummaryOptions { Budget = 500 }, parts, new[] { Over(0, 2, new string('가', 4000)) }).Digest == "", "Summaries are left out when switched off or over the budget");
-        var digestScene = NovelPrompts.Build(NovelPrompts.Standard(), new NovelScene(Array.Empty<Persona>(), "나", "", "", "", sent, "", "", digest), 100000);
+        var digestScene = NovelPrompts.Build(NovelPrompts.Standard(), new NovelScene(Array.Empty<Persona>(), "나", "", "", "", sent, "", digest), 100000);
         string sentText = string.Join("\n", digestScene.Select(m => m.Text));
         Check(sentText.Contains("### #1~3") && sentText.Contains("부분 7") && !sentText.Contains("부분 2\n"), "The novel's request carries the digest in place of the summarized parts");
         book.Keep("novel:a", first); book.Keep("novel:a", second); book.Keep("novel:a", Over(6, 8, "셋째")); book.Keep("novel:a", Over(1, 2, "겹침"));
@@ -141,6 +139,9 @@ public static class NovelTests
         var kept = book.SummariesOf("novel:a")[0]; book.Rewrite("novel:a", kept, "  고침  "); OrderedStore.FlushAsync().GetAwaiter().GetResult();
         var reread = new NovelBook(home);
         Check(reread.SummariesOf("novel:a").Count == 3 && reread.SummariesOf("novel:a")[0].Text == "고침" && reread.Forget("novel:a", reread.SummariesOf("novel:a")[0]) && reread.SummariesOf("novel:a").Count == 2 && reread.SummariesOf("novel:b").Count == 0, "Summaries are kept, edited and forgotten per story");
+        reread.Hide("novel:a", parts.Take(3), true); reread.Hide("novel:a", parts.Skip(1).Take(1), false); OrderedStore.FlushAsync().GetAwaiter().GetResult();
+        var eyes = new NovelBook(home);
+        Check(eyes.IsHidden("novel:a", parts[0]) && !eyes.IsHidden("novel:a", parts[1]) && eyes.IsHidden("novel:a", parts[2]) && !eyes.IsHidden("novel:b", parts[0]), "Closed eyes are kept per story");
         return count;
     }
 }

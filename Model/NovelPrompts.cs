@@ -29,9 +29,8 @@ public sealed class NovelPromptSet
     public NovelPromptSet Snapshot() => new() { Name = Name, Prefill = Prefill, Parts = Parts.Select(p => p.Snapshot()).ToList() };
 }
 // What a request for the next part of the story is made of: who is in it, the user, the room's note and memory, the story so far and what to write now.
-// Guide: a direction for this part only ("다음 전개 지시"), sent after the request and not kept in the story.
 // Digest: the story's summaries (NovelSummaries.Apply), sent in place of the parts they cover.
-public sealed record NovelScene(IReadOnlyList<Persona> Cast, string UserName, string UserNotes, string Note, string Summary, IReadOnlyList<ChatTurn> Story, string Direction, string Guide = "", string Digest = "");
+public sealed record NovelScene(IReadOnlyList<Persona> Cast, string UserName, string UserNotes, string Note, string Summary, IReadOnlyList<ChatTurn> Story, string Direction, string Digest = "");
 // Settings read from a SillyTavern preset besides the prompts (null = the preset says nothing about it).
 public sealed record NovelSampling(AiParameters Parameters, int? MaxContext, int? MaxOutput, bool? Stream, bool? ShowThinking);
 
@@ -141,8 +140,6 @@ public static class NovelPrompts
             "trim" or "noop" => "", _ => m.Value
         });
     }
-    // Going on from where the last part stopped (SillyTavern's "continue").
-    public const string Continue = "[바로 앞 부분의 마지막 문장 바로 뒤에서 그대로 이어 쓰세요. 이미 쓴 문장을 되풀이하거나 새로 시작하지 마세요.]";
     // The messages as the API settings want them: system messages sent as the user's (systemPrompt off), runs of system
     // messages joined (squash), runs of any one role joined (merge) - SillyTavern's prompt post-processing.
     public static List<PromptMessage> Shape(IEnumerable<PromptMessage> messages, bool systemPrompt, bool squash, bool merge)
@@ -160,7 +157,10 @@ public static class NovelPrompts
     public static string Asked(string direction) => direction.Trim().Length > 0 ? direction.Trim() : "(앞 장면에서 자연스럽게 이어서, 이야기를 한 걸음 진전시키는 다음 장면을 쓰세요.)";
     // The messages of one request: the parts that are on, in order, with the markers filled in. The story so far is cut
     // from its oldest end until the whole fits maxContext with room for maxOutput (0 = no limit).
-    public static List<PromptMessage> Build(NovelPromptSet set, NovelScene scene, int maxContext = 0, int maxOutput = 0)
+    public static List<PromptMessage> Build(NovelPromptSet set, NovelScene scene, int maxContext = 0, int maxOutput = 0) => Fit(set, scene, maxContext, maxOutput).Messages;
+    // How many of the story's newest parts go in a request (the rest do not fit).
+    public static int Kept(NovelPromptSet set, NovelScene scene, int maxContext = 0, int maxOutput = 0) => Fit(set, scene, maxContext, maxOutput).Kept;
+    static (List<PromptMessage> Messages, int Kept) Fit(NovelPromptSet set, NovelScene scene, int maxContext, int maxOutput)
     {
         var parts = set.Parts.Where(p => p.Enabled).ToList(); bool storyHere = parts.Any(p => p.Marker && p.Identifier == "chatHistory");
         var story = scene.Story.ToList();
@@ -173,7 +173,6 @@ public static class NovelPrompts
                 if (scene.Digest.Trim().Length > 0) list.Add(new(PromptMessage.System, scene.Digest.Trim()));
                 foreach (var turn in story) { list.Add(new(PromptMessage.User, Asked(turn.User))); list.Add(new(PromptMessage.Assistant, turn.Assistant)); }
                 list.Add(new(PromptMessage.User, Asked(scene.Direction)));
-                if (scene.Guide.Trim().Length > 0) list.Add(new(PromptMessage.System, "[다음 전개 지시 · 이번 장면에만 적용]\n" + Fill(scene.Guide.Trim(), scene)));
             }
             foreach (var part in parts)
             {
@@ -192,12 +191,12 @@ public static class NovelPrompts
             if (Fill(set.Prefill, scene).Trim() is { Length: > 0 } prefill) list.Add(new(PromptMessage.Assistant, prefill));
             return list;
         }
-        var messages = Make(); if (maxContext <= 0 || story.Count == 0) return messages;
+        var messages = Make(); if (maxContext <= 0 || story.Count == 0) return (messages, story.Count);
         // Measured once: everything but the story is fixed, so the story keeps as many of its newest parts as the rest leaves room for.
         static int Cost(string text) => AiRequestOptions.Estimate(text) + 4; int Part(ChatTurn turn) => Cost(Asked(turn.User)) + Cost(turn.Assistant);
         int room = maxContext - maxOutput - (messages.Sum(m => Cost(m.Text)) - story.Sum(Part)), used = 0, keep = 0;
         for (int i = story.Count - 1; i >= 0; i--) { used += Part(story[i]); if (used > room) break; keep++; }
         if (keep < story.Count) { story = story.Skip(story.Count - keep).ToList(); messages = Make(); }
-        return messages;
+        return (messages, keep);
     }
 }

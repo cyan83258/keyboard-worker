@@ -11,13 +11,16 @@ namespace KeyboardWorker;
 
 // Text messages with a character: a chat log (MessengerView) with its own chat rooms, prompt and length. It shares nothing
 // with the character page - not the rooms, not the threads, not the settings, not what is set aside. An exchange is set
-// aside, edited, deleted or asked again right under its answer; old messages are tidied from the top bar.
+// aside, edited, deleted or asked again right under its answer; old messages are tidied from the top bar. Every line the
+// user writes is a message of its own; "＋" adds a voice message, a photo, a gift, money or what happened since (TextCards),
+// and what the character says it is doing shows next to its name.
 public sealed class MessengerWindow : Window
 {
     static readonly string[] emoji = "😀 😄 😊 😉 😍 🥰 😘 😂 🤣 😅 😭 😢 🥺 😡 😤 😳 😴 🤔 😎 🙄 😱 🤗 👍 👎 👏 🙏 💪 👋 ❤ 💕 💔 ✨ 🔥 🎉 🌸 ☀ 🌙 ⭐ ☕ 🍰".Split(' ');
     readonly Buddy buddy; readonly PageFrame frame; readonly MessengerView view = new();
     readonly ComboBox who = new() { DisplayMemberPath = "Label", MinWidth = 170 }, modes = new() { DisplayMemberPath = "Name", MinWidth = 110, Margin = new Thickness(8, 0, 0, 0), ToolTip = "문자 모드 (추가 모드가 넣은 것)" };
-    readonly TextBlock status = Pastel.Text("", 12); readonly TextBox input; readonly Button send;
+    readonly TextBlock status = Pastel.Text("", 12), presence = new() { FontSize = 11.5, Margin = new Thickness(8, 0, 0, 0), MaxWidth = 220, TextTrimming = TextTrimming.CharacterEllipsis, Opacity = .8 };
+    readonly TextBox input; readonly Button send;
     sealed record Choice(Buddy.StageCharacter Character, string Label);
     StageMode mode; CancellationTokenSource? request; bool busy, filling;
     Buddy.StageCharacter Current => ((Choice)who.SelectedItem).Character;
@@ -26,7 +29,7 @@ public sealed class MessengerWindow : Window
     public MessengerWindow(Buddy buddy)
     {
         this.buddy = buddy; mode = buddy.TextModeNow;
-        frame = new PageFrame(buddy, this, StageMode.Messenger, () => busy, Enter, () => Current.Id); frame.Left(who); frame.Left(modes);
+        frame = new PageFrame(buddy, this, StageMode.Messenger, () => busy, Enter, () => Current.Id); frame.Left(who); frame.Left(presence); frame.Left(modes); presence.Foreground = Pastel.Ink;
         frame.Tool("모아 둔 것", "☆ 나 ✂ 로 모아 둔 문자를 봐요", () => new StageHistoryWindow(buddy, "", true, true) { Owner = this, ShowInTaskbar = false }.ShowDialog());
         Button tidy = null!; tidy = frame.Tool("정리", "오래된 문자를 지워 쌓이지 않게 해요 (모아 둔 것은 남아요)", () => Tidy(tidy));
         frame.Tool("문자 설정", "문자 메시지의 프롬프트 · 길이 · 말투 · 배경 (마주 보기와 따로예요)", () => { new StageSettingsWindow(buddy, Current, true) { Owner = this, ShowInTaskbar = false }.ShowDialog(); Enter(); });
@@ -36,7 +39,11 @@ public sealed class MessengerWindow : Window
         var smile = Pastel.Button("☺", () => { }, true); smile.Padding = new Thickness(11, 4, 11, 6); smile.FontSize = 17; smile.Margin = new Thickness(6, 0, 0, 0); smile.VerticalAlignment = VerticalAlignment.Bottom; smile.ToolTip = "이모티콘 넣기";
         var picker = Emoji(smile); smile.Click += (_, _) => { if (!picker.IsOpen) Stickers(); picker.IsOpen = !picker.IsOpen; };
         view.StickerPath = title => buddy.Stage.Sticker(title)?.Path;
-        DockPanel.SetDock(smile, Dock.Right); entry.Row.Children.Add(smile); entry.Row.Children.Add(input); bottom.Children.Add(entry.Row); status.Margin = new Thickness(2, 6, 0, 0); bottom.Children.Add(status);
+        var plus = Pastel.Button("＋", () => { }, true); plus.Padding = new Thickness(11, 4, 11, 6); plus.FontSize = 16; plus.Margin = new Thickness(6, 0, 0, 0); plus.VerticalAlignment = VerticalAlignment.Bottom; plus.ToolTip = "음성 메시지 · 사진 · 선물 · 송금 · 있었던 일";
+        var extras = new ContextMenu { PlacementTarget = plus, Placement = PlacementMode.Top };
+        foreach (var (kind, name, ask) in TextCards.Kinds) { var item = new MenuItem { Header = name }; item.Click += (_, _) => Card(kind, name, ask); extras.Items.Add(item); }
+        plus.Click += (_, _) => extras.IsOpen = true;
+        DockPanel.SetDock(smile, Dock.Right); entry.Row.Children.Add(smile); DockPanel.SetDock(plus, Dock.Right); entry.Row.Children.Add(plus); entry.Row.Children.Add(input); bottom.Children.Add(entry.Row); status.Margin = new Thickness(2, 6, 0, 0); bottom.Children.Add(status);
         frame.Root.Children.Add(new Border { Child = view, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.5, 1.5, 3, 3.5), CornerRadius = new CornerRadius(12), ClipToBounds = true });
         view.Edit += Edit; view.Delete += Delete; view.Again += async () => await Again(); view.IsKept = turn => buddy.StageClips.Has(Thread, turn);
         view.Keep += turn => { status.Text = buddy.StageClips.Toggle(Thread, turn) ? "모아 뒀어요. 문자를 정리해도 남아 있어요." : "모아 둔 것에서 뺐어요."; Reload(); };
@@ -87,7 +94,30 @@ public sealed class MessengerWindow : Window
         Title = name + (buddy.Rooms.Rooms(Page).Count > 1 ? " · " + buddy.Rooms.Current(Page).Name : "");
         view.SetFont(FontAssets.Get(buddy.Pref.StageFontPath), buddy.Pref.StageFontSize); view.SetBackdrop(buddy.Stage.State.TextBackdrop); Reload(true); status.Text = "";
     }
-    void Reload(bool fresh = false) => view.Load(buddy.StageTalks.Turns(Thread), fresh);
+    void Reload(bool fresh = false)
+    {
+        var turns = buddy.StageTalks.Turns(Thread); view.Load(turns, fresh);
+        string now = TextCards.Now(turns); presence.Text = now.Length > 0 ? "● " + now : ""; presence.ToolTip = now.Length > 0 ? Current.Name + "의 지금 상태" : null;
+    }
+    // A special message, written in a small box and put on its own line of what is being typed (sent with the rest).
+    void Card(string kind, string name, string ask)
+    {
+        var text = new TextBox { AcceptsReturn = kind != TextCards.Money, TextWrapping = TextWrapping.Wrap, MinHeight = kind == TextCards.Money ? 0 : 70, MaxLength = 1000, Padding = new Thickness(6, 4, 6, 4), FontSize = 13 };
+        var memo = new TextBox { MaxLength = 100, Padding = new Thickness(6, 4, 6, 4), FontSize = 13 };
+        var body = new StackPanel { Margin = new Thickness(18) }; body.Children.Add(Pastel.Text(ask, 12.5)); body.Children.Add(text);
+        if (kind == TextCards.Money) { body.Children.Add(new TextBlock { Text = "메모 (안 써도 돼요)", Foreground = Pastel.Ink, FontSize = 12.5, Margin = new Thickness(0, 8, 0, 0) }); body.Children.Add(memo); }
+        var dialog = new Window { Owner = this, ShowInTaskbar = false }; string? made = null;
+        var ok = Pastel.Button("넣기", () =>
+        {
+            string said = text.Text.Trim(); if (said.Length == 0) return;
+            if (kind == TextCards.Money && TextCards.Read(TextCards.Write(kind, said)) == null) { text.Text = ""; text.Focus(); return; }
+            made = TextCards.Write(kind, said, memo.Text); dialog.Close();
+        }); ok.HorizontalAlignment = HorizontalAlignment.Right; ok.Margin = new Thickness(0, 12, 0, 0); body.Children.Add(ok);
+        Pastel.Window(dialog, name, body, 420, kind == TextCards.Money ? 260 : 250); dialog.Loaded += (_, _) => text.Focus(); dialog.ShowDialog();
+        if (made == null) return;
+        input.Text = (input.Text.TrimEnd().Length > 0 ? input.Text.TrimEnd() + "\n" : "") + made; input.CaretIndex = input.Text.Length; input.Focus();
+        status.Text = name + "을(를) 넣었어요. 보내기를 누르면 함께 보내요.";
+    }
     void Tidy(Button anchor)
     {
         if (busy) return; string thread = Thread; int total = buddy.StageTalks.Turns(thread).Count; var menu = new ContextMenu { PlacementTarget = anchor, Placement = PlacementMode.Bottom };

@@ -26,7 +26,8 @@ public sealed class NovelState
     public Dictionary<string, string> Thoughts { get; set; } = new();   // "thread|ticks" -> what the model thought for that part
     public NovelSummaryOptions Summary { get; set; } = new();           // how the story is summarized (NovelSummaries)
     public Dictionary<string, List<NovelSummary>> Summaries { get; set; } = new();   // by thread, in the order of the story
-    public bool Welcomed { get; set; }                                  // the first-time note about the model was shown
+    public bool Welcomed { get; set; }                                  // the first-time note about the model was read
+    public Dictionary<string, HashSet<long>> Hidden { get; set; } = new();   // by thread: the parts (by when written) left out of requests
 }
 // The novel's settings (novel.json). The story itself is kept in the page talks (StageLog) under the novel's own rooms.
 public sealed class NovelBook
@@ -44,6 +45,7 @@ public sealed class NovelBook
         s.Parameters ??= new(); s.Parameters.Normalize(); s.Prompts = NovelPrompts.Normalize(s.Prompts); s.First ??= ""; s.Second ??= ""; s.KeepTurns = Math.Clamp(s.KeepTurns, 30, StageLog.MaxKeep);
         s.Summary = NovelSummaries.Normalize(s.Summary);
         s.Summaries = (s.Summaries ?? new()).Where(p => p.Value != null).ToDictionary(p => p.Key, p => p.Value.Where(x => x != null && x.Text != null && x.From <= x.To).OrderBy(x => x.From).TakeLast(NovelSummaries.MaxEntries).ToList());
+        s.Hidden = (s.Hidden ?? new()).Where(p => p.Value is { Count: > 0 }).ToDictionary(p => p.Key, p => p.Value);
         s.Thoughts = (s.Thoughts ?? new()).Where(p => p.Value != null).TakeLast(MaxThoughts).ToDictionary(p => p.Key, p => p.Value[..Math.Min(p.Value.Length, MaxThought)]);
     }
     public static string Key(string thread, ChatTurn turn) => thread + "|" + turn.At.UtcTicks;
@@ -63,6 +65,14 @@ public sealed class NovelBook
     }
     public bool Forget(string thread, NovelSummary summary) { bool gone = State.Summaries.TryGetValue(thread, out var list) && list.Remove(summary); if (gone) Save(); return gone; }
     public void Rewrite(string thread, NovelSummary summary, string text) { if (!State.Summaries.TryGetValue(thread, out var list) || list.IndexOf(summary) is not (>= 0 and var at)) return; list[at] = summary with { Text = text.Trim() }; Save(); }
+    // Parts the user closed the eye on: kept and shown, but not sent.
+    public bool IsHidden(string thread, ChatTurn turn) => State.Hidden.TryGetValue(thread, out var set) && set.Contains(turn.At.UtcTicks);
+    public void Hide(string thread, IEnumerable<ChatTurn> turns, bool hidden)
+    {
+        if (!State.Hidden.TryGetValue(thread, out var set)) State.Hidden[thread] = set = new();
+        foreach (var turn in turns) if (hidden) set.Add(turn.At.UtcTicks); else set.Remove(turn.At.UtcTicks);
+        Save();
+    }
     public void Save() { Normalize(); OrderedStore.SaveJson(path, State); }
     // The key of the novel page of these characters (its rooms and threads hang on it).
     public static string Page(string first, string second) => "novel:" + first + (second.Length > 0 && second != first ? "+" + second : "");

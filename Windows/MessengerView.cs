@@ -55,8 +55,35 @@ public sealed class MessengerView : Grid
     TextBox Words(string text, bool large) => new() { Text = text, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(0), Background = Brushes.Transparent, Foreground = Pastel.Ink, FontFamily = font, FontSize = large ? size * 2.2 : size, Padding = new Thickness(0) };
     // Where the picture of an emoticon with this title is (null = there is none, and the message is shown as it was written).
     public Func<string, string?> StickerPath { get; set; } = _ => null;
-    FrameworkElement Bubble(string text, bool mine, List<TextBox>? boxes = null)
+    static readonly FontFamily Emoji = new("Segoe UI Emoji");
+    // A card: a voice message (its words open under it), a photo described, a gift, money sent; what happened since is a note.
+    FrameworkElement? Card(TextCard card, bool mine)
     {
+        if (card.Kind == TextCards.Status) return null;
+        if (card.Kind == TextCards.Event) return Note("─  " + card.Text + "  ─");
+        var body = new StackPanel(); var head = new StackPanel { Orientation = Orientation.Horizontal };
+        string glyph = card.Kind switch { TextCards.Voice => "🎙", TextCards.Photo => "📷", TextCards.Gift => "🎁", _ => "💸" };
+        head.Children.Add(new TextBlock { Text = glyph, FontFamily = Emoji, FontSize = size, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 7, 0) });
+        var title = new TextBlock { Foreground = Pastel.Ink, FontFamily = font, FontSize = size * .85, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center }; head.Children.Add(title); body.Children.Add(head);
+        TextBlock Line(string text, double scale, bool soft = false) => new() { Text = text, Foreground = Pastel.Ink, FontFamily = font, FontSize = size * scale, TextWrapping = TextWrapping.Wrap, Opacity = soft ? .75 : 1, Margin = new Thickness(0, 4, 0, 0) };
+        switch (card.Kind)
+        {
+            case TextCards.Voice:
+                title.Text = "▶  " + TextCards.Length(card.Text) + "   음성 메시지"; var said = Line(card.Text, .92, true); said.Visibility = Visibility.Collapsed; body.Children.Add(said);
+                body.Cursor = System.Windows.Input.Cursors.Hand; body.ToolTip = "눌러서 내용 보기 / 접기"; body.MouseLeftButtonUp += (_, _) => said.Visibility = said.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; break;
+            case TextCards.Photo: title.Text = "사진 · 영상"; var shot = Line(card.Text, .92); shot.FontStyle = FontStyles.Italic; body.Children.Add(shot); break;
+            case TextCards.Gift: title.Text = mine ? "선물을 보냈어요" : "선물이 왔어요"; body.Children.Add(Line(card.Text, .95)); break;
+            default: title.Text = "송금"; var sum = Line(card.Text, 1.35); sum.FontWeight = FontWeights.Bold; body.Children.Add(sum); if (card.Memo.Length > 0) body.Children.Add(Line(card.Memo, .85, true)); break;
+        }
+        return new Border
+        {
+            Child = body, Width = 250, Background = Pastel.Paper, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.2, 1.2, 2, 2.4), CornerRadius = new CornerRadius(14), Padding = new Thickness(12, 8, 12, 9),
+            Margin = new Thickness(0, 3, 0, 3), HorizontalAlignment = mine ? HorizontalAlignment.Right : HorizontalAlignment.Left
+        };
+    }
+    FrameworkElement? Bubble(string text, bool mine, List<TextBox>? boxes = null)
+    {
+        if (TextCards.Read(text) is { } card) return Card(card, mine);
         // "[이모티콘: 제목]" alone is the user's (or the character's) picture emoticon: shown as the picture, without a bubble.
         if (StageSticker.Named(text) is { } title && StickerPath(title) is { } file)
         {
@@ -76,7 +103,7 @@ public sealed class MessengerView : Grid
         foreach (var beat in StageScript.Parse(answer))
         {
             if (beat.Narration.Length > 0) yield return Note(beat.Narration);
-            foreach (string message in beat.Line.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) yield return Bubble(message, false, boxes);
+            foreach (string message in beat.Line.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) if (Bubble(message, false, boxes) is { } bubble) yield return bubble;
         }
     }
     // The time of an exchange and what can be done with it: small icons under its answer.
@@ -105,7 +132,7 @@ public sealed class MessengerView : Grid
         for (int i = Math.Max(0, turns.Count - shown); i < turns.Count; i++)
         {
             var turn = turns[i]; string date = turn.At.ToLocalTime().ToString("yyyy년 M월 d일"); if (date != day) { day = date; thread.Children.Add(Note(date)); }
-            if (turn.User.Trim().Length > 0) thread.Children.Add(Bubble(turn.User, true));
+            foreach (var mine in Mine(turn.User)) thread.Children.Add(mine);
             var boxes = new List<TextBox>(); foreach (var message in Messages(turn.Assistant, boxes)) thread.Children.Add(message);
             thread.Children.Add(Actions(turn, i == turns.Count - 1, boxes));
         }
@@ -113,6 +140,8 @@ public sealed class MessengerView : Grid
     }
     void Replace(IEnumerable<UIElement> messages) { foreach (var old in pending) thread.Children.Remove(old); pending.Clear(); foreach (var message in messages) { pending.Add(message); thread.Children.Add(message); } Bottom(); }
     // The user's message went out and the answer is awaited; then it arrives bit by bit. The window loads the thread again when it is done (or failed).
-    public void Asked(string message) { thread.Children.Add(Bubble(message, true)); pending.Clear(); Replace(new[] { Bubble("…", false) }); }
+    public void Asked(string message) { foreach (var mine in Mine(message)) thread.Children.Add(mine); pending.Clear(); Replace(new[] { Bubble("…", false)! }); }
+    // The user's message: every line is a message of its own, as the answer's are.
+    IEnumerable<UIElement> Mine(string text) { foreach (string line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) if (Bubble(line, true) is { } bubble) yield return bubble; }
     public void Streaming(string partial) => Replace(Messages(partial));
 }

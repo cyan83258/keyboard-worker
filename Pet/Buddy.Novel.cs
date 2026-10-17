@@ -22,11 +22,23 @@ public sealed partial class Buddy
         settings.MaxOutputTokens = book.MaxOutput; settings.MaxContextTokens = book.MaxContext; settings.Streaming = book.Stream; settings.UsageKind = "Novel";
         settings.RequestTimeoutSeconds = Math.Max(settings.RequestTimeoutSeconds, 300); return settings;
     }
-    // The scene of a request: the cast, the user, the room's note and memory, the story so far, what to write now and a guide for this part.
-    public NovelScene NovelScene(StageCharacter[] cast, string thread, StageRoom room, string direction, string guide = "")
+    // The scene of a request: the cast, the user, the room's note and memory, the story so far (summarized parts as their
+    // summaries, without the parts the user closed the eye on) and what to write now.
+    public NovelScene NovelScene(StageCharacter[] cast, string thread, StageRoom room, string direction)
     {
         var (digest, story) = NovelSummaries.Apply(Novel.State.Summary, StageTalks.Turns(thread), Novel.SummariesOf(thread));
-        return new(cast.Select(c => c.Persona).ToArray(), Chat.Preferences.Profile.UserName ?? "", Chat.Preferences.Profile.UserNotes ?? "", room.Note, room.Summary, story, direction, guide, digest);
+        return new(cast.Select(c => c.Persona).ToArray(), Chat.Preferences.Profile.UserName ?? "", Chat.Preferences.Profile.UserNotes ?? "", room.Note, room.Summary, story.Where(t => !Novel.IsHidden(thread, t)).ToArray(), direction, digest);
+    }
+    // Which parts (places in the story, from 0) the next request sends as they are, which as summaries, and which not at all.
+    public (int[] Sent, int[] Summarized, int[] Hidden, int[] Left) NovelSent(StageCharacter[] cast, string page)
+    {
+        var room = Rooms.Current(page); string thread = StageRooms.Thread(page, room); var all = StageTalks.Turns(thread); var book = Novel.State;
+        var scene = NovelScene(cast, thread, room, ""); var sent = scene.Story.TakeLast(NovelPrompts.Kept(book.Prompts, scene, book.MaxContext, book.MaxOutput)).Select(t => t.At).ToHashSet();
+        var summaries = Novel.SummariesOf(thread); bool digest = scene.Digest.Length > 0;
+        int[] Where(Func<ChatTurn, bool> test) => Enumerable.Range(0, all.Count).Where(i => test(all[i])).ToArray();
+        var hidden = Where(t => Novel.IsHidden(thread, t)); var shown = Where(t => sent.Contains(t.At));
+        var summarized = digest ? Where(t => !sent.Contains(t.At) && summaries.Any(s => t.At.UtcTicks >= s.From && t.At.UtcTicks <= s.To)) : Array.Empty<int>();
+        return (shown, summarized, hidden, Enumerable.Range(0, all.Count).Except(shown).Except(summarized).Except(hidden).ToArray());
     }
     // ---- summaries ----
     // The settings a summary is asked with: the summary's own connection, else the novel's; the connection's own parameters
@@ -71,27 +83,21 @@ public sealed partial class Buddy
     {
         var book = Novel.State; return NovelPrompts.Shape(NovelPrompts.Build(book.Prompts, scene, book.MaxContext, book.MaxOutput), book.SystemPrompt, book.Squash, book.MergeRoles);
     }
-    // The next part of the story in the room open on this page, or (goOn) more of the last part. guide: for this part only.
+    // The next part of the story in the room open on this page, written to the direction (kept with it, as its input).
     // Returns the part as it was kept.
-    public async Task<ChatTurn> WriteNovel(string page, StageCharacter[] cast, string direction, string guide, bool goOn, CancellationToken cancellation, Action<string>? progress, Action<string>? thinking)
+    public async Task<ChatTurn> WriteNovel(string page, StageCharacter[] cast, string direction, CancellationToken cancellation, Action<string>? progress, Action<string>? thinking)
     {
         if (IsChatBusy) throw new InvalidOperationException("이전 답변을 기다리거나 먼저 생성을 중단해 주세요.");
         CancelAutomatic(); sending = true; using var request = CancellationTokenSource.CreateLinkedTokenSource(cancellation); activeChatCancellation = request;
         try
         {
             var book = Novel.State; var room = Rooms.Current(page); string thread = StageRooms.Thread(page, room); string thought = "";
-            var last = StageTalks.Turns(thread).LastOrDefault(); if (goOn && last == null) throw new InvalidOperationException("이어 쓸 부분이 없어요.");
-            var settings = NovelSettings(); var messages = NovelMessages(NovelScene(cast, thread, room, goOn ? NovelPrompts.Continue : direction, guide));
+            var settings = NovelSettings(); var messages = NovelMessages(NovelScene(cast, thread, room, direction));
             string text = await new AiClient().Compose(settings, messages, request.Token, settings.Streaming ? progress : null, book.ShowThinking ? t => { thought = t; thinking?.Invoke(t); } : null);
             request.Token.ThrowIfCancellationRequested();
-            ChatTurn turn;
-            if (goOn) { turn = last! with { Assistant = ReplyCompletion.Join(last!.Assistant, text) }; StageTalks.Replace(thread, last!, turn); turn = StageTalks.Turns(thread)[^1]; }
-            else
-            {
-                // The cast is named with " · " so that the memory reads the part as a story, not as one character's line.
-                turn = new ChatTurn(direction.Trim(), text.Trim(), DateTimeOffset.Now, string.Join(" · ", cast.Select(c => c.Name)) + " · 소설", thread, "소설");
-                StageTalks.Limit = book.KeepTurns; StageTalks.Add(thread, turn); turn = StageTalks.Turns(thread)[^1];
-            }
+            // The cast is named with " · " so that the memory reads the part as a story, not as one character's line.
+            var turn = new ChatTurn(direction.Trim(), text.Trim(), DateTimeOffset.Now, string.Join(" · ", cast.Select(c => c.Name)) + " · 소설", thread, "소설");
+            StageTalks.Limit = book.KeepTurns; StageTalks.Add(thread, turn); turn = StageTalks.Turns(thread)[^1];
             if (thought.Length > 0) Novel.Keep(thread, turn, thought);
             if (!closing) SummarizeQuietly(thread, cast);
             return turn;
