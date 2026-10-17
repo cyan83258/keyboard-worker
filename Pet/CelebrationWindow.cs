@@ -57,7 +57,7 @@ public sealed class CelebrationWindow : Window
     public CelebrationWindow(Buddy buddy, string headline, string title, string detail, string action, Action open, bool effects)
     {
         WindowStyle = WindowStyle.None;
-        AllowsTransparency = true;
+        AllowsTransparency = true; Native.Software(this);
         Background = Brushes.Transparent;
         ShowInTaskbar = false;
         ShowActivated = false;

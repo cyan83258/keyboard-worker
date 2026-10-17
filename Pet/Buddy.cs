@@ -87,7 +87,7 @@ public sealed partial class Buddy : Window, IPetAnchor
     public void CelebrateWith(string headline, string title, string detail, string action, Action open)
     {
         if (closing) return;
-        if (hidden || IsQuiet) { pendingCelebration = (headline, title, detail, action, open); return; }
+        if (hidden || IsQuiet || light) { pendingCelebration = (headline, title, detail, action, open); return; }
         pendingCelebration = null; celebration?.Close();
         celebration = new CelebrationWindow(this, headline, title, detail, action, open, true);
         var shown = celebration;
@@ -212,7 +212,7 @@ public sealed partial class Buddy : Window, IPetAnchor
     readonly Image image = new() { Stretch = Stretch.Uniform };
     public Buddy()
     {
-        Title = "Keyboard Worker"; WindowStyle = WindowStyle.None; AllowsTransparency = true;
+        Title = "Keyboard Worker"; WindowStyle = WindowStyle.None; AllowsTransparency = true; Native.Software(this);
         Background = Brushes.Transparent; ShowInTaskbar = false; ShowActivated = false;
         ResizeMode = ResizeMode.NoResize; StartupTrace.Mark("창 기본"); Resources = Pastel.Styles(); StartupTrace.Mark("테마");
         bubble = new PetBubbleWindow(this);
@@ -418,7 +418,7 @@ public sealed partial class Buddy : Window, IPetAnchor
         if (reloadImages) { animation.Stop(); bounce.Reset(); expressionUntil = 0; activity.Reset(Environment.TickCount64); state = IdlePose(); }
         audio.Configure(p); Display(state); ClampPosition(); MarkHome(); bubble.Configure(); if (persist) Storage.Save(Pref);
         SyncCompanion(); if (!p.PettingHearts) hearts.Clear();
-        hearts.LowPower = p.LowPower; Music.Configure(p.Music); SyncMusic(); input?.Watch(p.MouseActivity);
+        hearts.LowPower = p.LowPower; Music.Configure(p.Music); SyncMusic(); input?.Watch(p.MouseActivity && !light && !hidden);
     }
     string IdlePose()
     {

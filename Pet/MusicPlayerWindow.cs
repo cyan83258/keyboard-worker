@@ -25,7 +25,7 @@ public sealed class MusicPlayerWindow : Window
     {
         this.buddy = buddy;
         WindowStyle = WindowStyle.None;
-        AllowsTransparency = true;
+        AllowsTransparency = true; Native.Software(this);
         Background = Brushes.Transparent;
         ShowInTaskbar = false;
         ShowActivated = false;

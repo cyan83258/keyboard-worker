@@ -86,7 +86,7 @@ public sealed class PetBubbleWindow : Window
     void MarkKept() { bool kept = buddy.Collection.Has(Speaker, text.Text.Trim()); keep.Content = kept ? "♥" : "♡"; keep.ToolTip = kept ? "도감에서 빼기" : "이 대사를 도감에 담기"; }
     public PetBubbleWindow(Buddy buddy, Window? anchor = null, Func<string>? name = null)
     {
-        this.buddy = buddy; this.anchor = anchor ?? buddy; this.name = name; WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; ShowActivated = false;
+        this.buddy = buddy; this.anchor = anchor ?? buddy; this.name = name; WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; ShowActivated = false; Native.Software(this);
         ShowInTaskbar = false; ResizeMode = ResizeMode.NoResize; SizeToContent = SizeToContent.Height; Icon = PetIcon.WindowIcon;
         var panel = new DockPanel(); var header = new DockPanel();
         var close = new Button { Content = "×", Padding = new Thickness(6, 0, 6, 1), FontWeight = FontWeights.Bold }; Pastel.Ghost(close); caption.FontWeight = FontWeights.Bold;

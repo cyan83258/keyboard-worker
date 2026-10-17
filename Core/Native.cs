@@ -11,7 +11,21 @@ public static class Native
 {
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int width, int height, uint flags);
     public static bool IsTopmost(IntPtr hwnd) => (GetStyle(hwnd, -20).ToInt64() & 8) != 0;
-    public static void RaisePet(IntPtr hwnd) { if (hwnd != IntPtr.Zero) SetWindowPos(hwnd, new IntPtr(-1), 0, 0, 0, 0, 0x13); }
+    // While a game (or anything full screen) is in front, or the pets are hidden, nothing of this app lies over it: a window
+    // drawn over a game takes its full-screen optimizations away and makes it stutter. Then "raising" sends a pet to the back.
+    // A see-through window drawn by the graphics card is copied back from it on every change, which holds up the card a game
+    // is using. The pets are small, so they are drawn by the processor instead and leave the graphics card to the game.
+    public static void Software(System.Windows.Window window) => window.SourceInitialized += (_, _) =>
+    {
+        if (System.Windows.PresentationSource.FromVisual(window) is System.Windows.Interop.HwndSource source) source.CompositionTarget.RenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+    };
+    public static bool Sunk { get; set; }
+    public static void RaisePet(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        if (!Sunk) { SetWindowPos(hwnd, new IntPtr(-1), 0, 0, 0, 0, 0x13); return; }
+        SetWindowPos(hwnd, new IntPtr(-2), 0, 0, 0, 0, 0x13); SetWindowPos(hwnd, new IntPtr(1), 0, 0, 0, 0, 0x13);
+    }
     [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h, int attribute, ref uint value, int size);
     public static bool RemoveSystemBorder(IntPtr hwnd)
     {
@@ -63,13 +77,7 @@ public static class Native
         }, IntPtr.Zero);
         return found;
     }
-    [DllImport("kernel32.dll")] static extern bool SetProcessWorkingSetSize(IntPtr process, IntPtr minimum, IntPtr maximum);
     // Hand memory that is not being touched back to Windows (it is paged in again on use).
-    public static void TrimMemory() { try
-    {
-        using var self = System.Diagnostics.Process.GetCurrentProcess();
-        SetProcessWorkingSetSize(self.Handle, new IntPtr(-1), new IntPtr(-1));
-    } catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { } }
     public static void Yield(bool lower) { try
     {
         using var self = System.Diagnostics.Process.GetCurrentProcess();

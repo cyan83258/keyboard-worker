@@ -14,7 +14,7 @@ public sealed class SceneWindow : Window
     readonly DispatcherTimer leave = new() { Interval = TimeSpan.FromSeconds(9) };
     public SceneWindow(Buddy buddy, string path, string title)
     {
-        WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; ShowInTaskbar = false; ShowActivated = false;
+        WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; ShowInTaskbar = false; ShowActivated = false; Native.Software(this);
         ResizeMode = ResizeMode.NoResize; Topmost = true; Width = 340; SizeToContent = SizeToContent.Height; Icon = PetIcon.WindowIcon;
         var panel = new StackPanel();
         try { panel.Children.Add(new Border { CornerRadius = new CornerRadius(10), ClipToBounds = true, Child = new Image { Source = ImageAssets.Read(path, 640), Stretch = Stretch.Uniform, MaxHeight = 300 } }); }

@@ -17,7 +17,7 @@ public sealed class UsagePerformanceWindow : Window
         p.Children.Add(Pastel.Text("날짜가 바뀌면 하루 예산이 새로 시작합니다. 실제 서버 사용량을 반영하며 미제공 응답은 출력 예약 예산으로 추정합니다. 요청 전 출력 예산을 예약해 동시 요청이 한도를 넘지 않게 합니다. 입력 토큰·서버 집계 차이는 응답 후 반영하므로 토큰 값은 API 제공사 청구 화면과 다를 수 있습니다.", 12));
         var low = new CheckBox { Content = "저전력 모드 · 하트 15fps / 적은 효과", IsChecked = buddy.Pref.LowPower }; p.Children.Add(low);
         var gameLight = new CheckBox { Content = "게임·전체 화면 프로그램 사용 중에는 가볍게 동작", IsChecked = buddy.Pref.Awareness.GameLight }; p.Children.Add(gameLight);
-        p.Children.Add(Pastel.Text("게임이나 전체 화면 프로그램이 맨 앞에 있는 동안 타이핑 소리·흔들림·하트·플레이어 장식을 쉬고, 손 반응을 줄이고, 이 프로그램의 우선순위를 낮춰 다른 프로그램에 자원을 양보합니다. 업무 프로그램을 전체 화면으로 쓸 때는 평소대로 동작해요.", 12));
+        p.Children.Add(Pastel.Text("게임이나 전체 화면 프로그램이 맨 앞에 있는 동안 캐릭터는 그 창 뒤로 물러나고(게임 위에 겹쳐 그리면 게임이 끊길 수 있어요), 타이핑 반응·소리·흔들림·하트·플레이어 장식·마우스 감지를 쉬고, 이 프로그램의 우선순위를 낮춰 게임에 자원을 양보합니다. 게임에서 나오면 다시 앞으로 나와요. 업무 프로그램을 전체 화면으로 쓸 때는 평소대로 동작해요.", 12));
         var gameHide = new CheckBox { Content = "게임을 하는 동안에는 캐릭터를 아예 숨기기", IsChecked = buddy.Pref.Awareness.GameHide }; p.Children.Add(gameHide);
         p.Children.Add(Pastel.Text("가볍게 동작해도 게임이 버벅이면 켜 보세요. 화면 위에 떠 있는 창 자체가 게임의 전체 화면 최적화를 방해할 수 있습니다. 게임에서 나오면 다시 나타나요.", 12));
         // Measured use of this program itself, to judge whether it is the cause of a slowdown.

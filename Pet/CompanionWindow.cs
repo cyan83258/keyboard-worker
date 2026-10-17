@@ -45,7 +45,7 @@ public sealed class CompanionWindow : Window, IPetAnchor
     }
     public CompanionWindow(Buddy owner, CharacterPreset preset, bool persistPosition = true)
     {
-        this.owner = owner; this.persistPosition = persistPosition; Preset = preset; Title = preset.Name; WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent;
+        this.owner = owner; this.persistPosition = persistPosition; Preset = preset; Title = preset.Name; WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; Native.Software(this);
         Topmost = true; ShowInTaskbar = false; ShowActivated = false; ResizeMode = ResizeMode.NoResize; Icon = PetIcon.WindowIcon;
         body.Children.Add(back); body.Children.Add(character); body.Children.Add(image); body.Children.Add(front); body.Children.Add(hearts); Content = body; bounce = new(body);
         images = new(Dispatcher, () => Display(pose)); gear = new(Dispatcher, () => { front.InvalidateVisual(); back.InvalidateVisual(); });
@@ -127,11 +127,11 @@ public sealed class CompanionWindow : Window, IPetAnchor
         back.InvalidateVisual();
         if (bubble.IsVisible) bubble.Reposition();
     }
-    public void Tap(bool light = false)
+    public void Tap()
     {
         if (disposed || Opacity == 0) return; long now = Environment.TickCount64; typedAt = now; if (!bubble.IsReply) bubble.Hide();
-        if (handGate.Accept(now, light ? Math.Max(1000, appearance.Desktop.TypingReactionMs) : appearance.Desktop.TypingReactionMs)) Display(hands.Tap());
-        if (!light && !owner.IsQuiet && appearance.Desktop.TypingBounce && bounceGate.Accept(now, appearance.Desktop.BodyReactionMs)) { direction = !direction; bounce.Tap(direction, appearance.Desktop.BounceStrength); }
+        if (handGate.Accept(now, appearance.Desktop.TypingReactionMs)) Display(hands.Tap());
+        if (!owner.IsQuiet && appearance.Desktop.TypingBounce && bounceGate.Accept(now, appearance.Desktop.BodyReactionMs)) { direction = !direction; bounce.Tap(direction, appearance.Desktop.BounceStrength); }
         settle.Stop(); settle.Start();
     }
     public void Tick(long now, bool hidden)

@@ -48,7 +48,16 @@ public sealed partial class Buddy
     {
         bool lighter = Pref.Awareness.GameLight && !lockedSession && apps.InFront && (apps.Current.Kind == "game" || (fullscreenNow && apps.Current.Kind != "work"));
         if (lighter == light) return; light = lighter; Native.Yield(light);
-        if (light) { bounce.Reset(); hearts.Clear(); audio.Stop(); Native.TrimMemory(); }
+        if (light) { bounce.Reset(); hearts.Clear(); audio.Stop(); animation.Stop(); if (!hidden) Display(IdlePose()); }
+        StepAside();
+    }
+    // In a game or hidden: the pets go behind everything and the mouse is not listened to (a gaming mouse reports
+    // a thousand moves a second). Otherwise they come back on top.
+    void StepAside()
+    {
+        input?.Watch(Pref.MouseActivity && !light && !hidden);
+        bool sink = light || hidden; if (Native.Sunk == sink) return; Native.Sunk = sink;
+        Native.RaisePet(hwnd); companion?.Raise(); bubble.Raise(); musicPlayer?.Raise();
     }
     // What the pets may know about right now, added to a chat request: the program in use and the video or song playing.
     async System.Threading.Tasks.Task<string> Surroundings(bool? media)

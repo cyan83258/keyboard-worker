@@ -26,7 +26,8 @@ public sealed partial class Buddy
         if (reactionPreview?.IsActive == true) return;
         if (keyboard)
         {
-            companion?.Tap(light);
+            // In a game the pets keep still: a picture that changes over a game is redrawn and costs the game frames.
+            if (!light) companion?.Tap();
             bool measuring = Pref.Desktop.WorkEnabled && !policy.ExcludeWork && foregroundName != "KeyboardWorker" && !activity.IsPaused(now) && FocusTimer.Phase != "휴식";
             if (measuring)
             {
@@ -41,9 +42,9 @@ public sealed partial class Buddy
             }
             else Work.Suspend();
             if (!light && !IsQuiet && !policy.Mute && !manualHidden && !(Pref.HideFullscreen && fullscreenNow)) audio.Play(Pref);
-            if (!hidden && (Pref.Desktop.TypingPriority || !ExpressionActive()))
+            if (!hidden && !light && (Pref.Desktop.TypingPriority || !ExpressionActive()))
             {
-                if (reactionLimiter.Accept(now, light ? Math.Max(1000, Pref.Desktop.TypingReactionMs) : Pref.Desktop.TypingReactionMs)) Display(hands.Tap());
+                if (reactionLimiter.Accept(now, Pref.Desktop.TypingReactionMs)) Display(hands.Tap());
                 if (!light && !IsQuiet && Pref.Desktop.TypingBounce && bodyLimiter.Accept(now, Pref.Desktop.BodyReactionMs)) { bounceLeft = !bounceLeft; bounce.Tap(bounceLeft, Pref.Desktop.BounceStrength); }
                 animation.Stop(); animation.Start();
             }
@@ -86,11 +87,11 @@ public sealed partial class Buddy
         {
             hidden = hide; Opacity = hide ? 0 : 1; Native.Style(hwnd, hide || Pref.ClickThrough);
             if (hide) { animation.Stop(); bounce.Reset(); bubble.Hide(); if (manualHidden || fullscreenNow) audio.Stop(); }
-            else { activity.Reset(now); Display("idle"); RaisePets(); }
-            Music.Rest(hide);
+            else { activity.Reset(now); Display("idle"); }
+            Music.Rest(hide); StepAside(); if (!hide) RaisePets();
         }
         // A hidden pet only has to notice when it may come back (app switches arrive as events), so it ticks less often.
-        var pace = TimeSpan.FromSeconds(hidden ? 3 : 1); if (clock.Interval != pace) clock.Interval = pace;
+        var pace = TimeSpan.FromSeconds(hidden ? 3 : light ? 2 : 1); if (clock.Interval != pace) clock.Interval = pace;
     }
     // Keeps the tray text current and ends a rest cleanly. Returns whether the user is resting.
     bool UpdateRest(long now, bool silent)
