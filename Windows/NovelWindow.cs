@@ -17,7 +17,13 @@ public sealed class NovelWindow : Window
     readonly ComboBox first = new() { DisplayMemberPath = "Label", MinWidth = 160 }, second = new() { DisplayMemberPath = "Label", MinWidth = 150 };
     readonly TextBlock status = new() { Foreground = Pastel.Ink, FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
     readonly CheckBox stream = Small("스트리밍", "쓰는 중인 글을 실시간으로 보여 줘요"), thinking = Small("추론 보기", "AI가 쓰기 전에 생각한 내용을 받아 두고, '추론' 버튼으로 펼쳐 볼 수 있게 해요 (생각을 보내 주는 모델만)");
-    readonly TextBox input; readonly Button send;
+    readonly TextBox input, guide = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MaxLength = 4000, Height = 52, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontSize = 13, Padding = new Thickness(8, 5, 8, 5) };
+    readonly Button send, guideButton, goOn; readonly Border guidePanel; readonly TextBlock guideNote = new() { Foreground = Pastel.Ink, Opacity = .7, FontSize = 11.5, Margin = new Thickness(2, 3, 0, 0), TextWrapping = TextWrapping.Wrap };
+    // The guide for one part: applied to the next part written and to writing that part again; once a newer part is
+    // asked for, a guide that was already used is cleared instead of being applied a second time.
+    string usedGuide = ""; bool guideUsed;
+    // The typeface the story is read in: the one that came with the program, else the page font.
+    static readonly string BookFont = System.IO.Path.Combine(AppContext.BaseDirectory, "fonts", "RIDIBatang.otf");
     sealed record Choice(Buddy.StageCharacter? Character, string Label);
     CancellationTokenSource? request; bool busy, filling;
     // Small, so the two take one thin line.
@@ -32,11 +38,24 @@ public sealed class NovelWindow : Window
         var with = new TextBlock { Text = "＋", Foreground = Pastel.Hot, FontWeight = FontWeights.Bold, FontSize = 16, Margin = new Thickness(8, 0, 8, 0), ToolTip = "함께 등장할 캐릭터 (두 명까지)" };
         frame.Left(first); frame.Left(with); frame.Left(second);
         frame.Tool("프롬프트", "소설에 쓰는 프롬프트: 항목 켜고 끄기 · 순서 · 편집 · SillyTavern 프리셋 불러오기", () => { if (busy) return; new NovelPromptWindow(buddy) { Owner = this, ShowInTaskbar = false }.ShowDialog(); });
-        frame.Tool("API 설정", "소설 전용 AI 연결 · 최대 입력/출력 토큰 · 온도 등", () => { if (busy) return; new NovelApiWindow(buddy) { Owner = this, ShowInTaskbar = false }.ShowDialog(); });
+        frame.Tool("API 설정", "소설 전용 AI 연결 · 모델 · 컨텍스트와 응답 길이 · 샘플링 · 추론", () =>
+        {
+            if (busy) return; new NovelApiWindow(buddy) { Owner = this, ShowInTaskbar = false }.ShowDialog();
+            stream.IsChecked = book.Stream; thinking.IsChecked = view.ShowThinking = book.ShowThinking; Reload();
+        });
 
         var bottom = new StackPanel { Margin = new Thickness(0, 10, 0, 0) }; DockPanel.SetDock(bottom, Dock.Bottom); frame.Root.Children.Add(bottom);
+        // Above the entry: the guide for the next part, shown when its button is pressed.
+        var guideHead = new TextBlock { Text = "다음 전개 지시 · 이번 장면에만 적용돼요", Foreground = Pastel.Hot, FontWeight = FontWeights.Bold, FontSize = 12, Margin = new Thickness(2, 0, 0, 3) };
+        var guideBody = new StackPanel(); guideBody.Children.Add(guideHead); guideBody.Children.Add(guide); guideBody.Children.Add(guideNote);
+        guidePanel = new Border { Child = guideBody, Background = Pastel.CardBlue, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.2), CornerRadius = new CornerRadius(10), Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 0, 8), Visibility = Visibility.Collapsed };
+        bottom.Children.Add(guidePanel);
+        guide.TextChanged += (_, _) => { if (guideUsed && guide.Text.Trim() != usedGuide) guideUsed = false; Guide(); };
         var entry = PageFrame.Entry(async () => await Write(input!.Text.Trim(), false), () => request?.Cancel(), () => busy, 6000); input = entry.Input; send = entry.Send; send.Content = "쓰기";
-        input.ToolTip = "다음 장면의 방향이나 일어날 일을 적어요. 비워 두고 '쓰기'를 누르면 이어서 써요. (Enter로 쓰기 · Shift+Enter 줄바꿈)";
+        input.ToolTip = "다음 장면에서 일어날 일을 적어요. 비워 두고 '쓰기'를 누르면 이어서 써요. (Enter로 쓰기 · Shift+Enter 줄바꿈)";
+        Button Side(string text, string tip, Action action) { var button = Pastel.Button(text, action, true); button.Padding = new Thickness(11, 6, 11, 6); button.FontSize = 12.5; button.Margin = new Thickness(6, 0, 0, 0); button.VerticalAlignment = VerticalAlignment.Bottom; button.ToolTip = tip; DockPanel.SetDock(button, Dock.Right); entry.Row.Children.Add(button); return button; }
+        goOn = Side("이어 쓰기", "마지막 부분을 끊긴 곳에서 이어서 더 써요", async () => await Write("", false, true));
+        guideButton = Side("다음 전개 지시", "이번 장면에만 적용할 전개 지시를 적어요 (쓴 뒤 다시 쓰기에도 적용, 그다음 장면부터는 빠져요)", () => { guidePanel.Visibility = guidePanel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; if (guidePanel.Visibility == Visibility.Visible) guide.Focus(); });
         entry.Row.Children.Add(input); bottom.Children.Add(entry.Row);
         var options = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 6, 0, 0) }; options.Children.Add(stream); options.Children.Add(thinking); options.Children.Add(status); bottom.Children.Add(options);
         stream.IsChecked = book.Stream; thinking.IsChecked = book.ShowThinking;
@@ -54,7 +73,7 @@ public sealed class NovelWindow : Window
         first.SelectionChanged += (_, _) => Chosen(); second.SelectionChanged += (_, _) => Chosen();
         Closed += (_, _) => request?.Cancel();
         Pastel.Window(this, "소설", frame.Shell, 1120, 820, PageFrame.Sky); MinWidth = 900; MinHeight = 560; Enter();
-        Loaded += (_, _) => input.Focus();
+        Loaded += (_, _) => input.Focus(); Guide();
     }
     public void Select(string id) { foreach (Choice choice in first.Items) if (choice.Character?.Id == id) { first.SelectedItem = choice; return; } }
     // The cast changed: it is remembered, and the novel of these characters is opened.
@@ -68,7 +87,7 @@ public sealed class NovelWindow : Window
         var cast = Cast; string names = string.Join(" ♡ ", cast.Select(c => c.Name));
         frame.Rooms.Load(Page, names + " · 소설");
         Title = names + " · 소설" + (Page.Length > 0 && buddy.Rooms.Rooms(Page).Count > 1 ? " · " + buddy.Rooms.Current(Page).Name : "");
-        view.SetFont(FontAssets.Get(buddy.Pref.StageFontPath), buddy.Pref.StageFontSize); Reload(true); status.Text = cast.Length == 0 ? "등장할 캐릭터를 골라 주세요." : "";
+        view.SetFont(System.IO.File.Exists(BookFont) ? FontAssets.Get(BookFont) : FontAssets.Get(buddy.Pref.StageFontPath), Math.Max(16, buddy.Pref.StageFontSize)); Reload(true); status.Text = cast.Length == 0 ? "등장할 캐릭터를 골라 주세요." : "";
     }
     void Reload(bool fresh = false) => view.Load(Page.Length == 0 ? Array.Empty<ChatTurn>() : buddy.StageTalks.Turns(Thread), fresh);
     void Edit(ChatTurn turn)
@@ -88,21 +107,31 @@ public sealed class NovelWindow : Window
         buddy.StageTalks.Remove(thread, last); Reload();
         if (!await Write(last.User, true)) { buddy.StageTalks.Import(thread, new[] { last }); Reload(); }
     }
-    // One part of the story. again: written in place of the one just taken back. False when nothing came.
-    async Task<bool> Write(string direction, bool again)
+    // How the guide stands: waiting to be used, used by the last part (and kept for writing it again), or empty.
+    void Guide()
+    {
+        string text = guide.Text.Trim(); guideButton.Content = text.Length > 0 ? "다음 전개 지시 ●" : "다음 전개 지시";
+        guideNote.Text = text.Length == 0 ? "비어 있어요." : guideUsed ? "방금 쓴 부분에 적용됐어요. ↻ 다시 쓰기에도 적용되고, 새 장면을 쓰면 지워져요." : "다음에 쓰는 장면에 적용돼요.";
+    }
+    // One part of the story. again: written in place of the one just taken back; more: the last part goes on. False when nothing came.
+    async Task<bool> Write(string direction, bool again, bool more = false)
     {
         var cast = Cast; if (busy || cast.Length == 0) return false; bool written = false;
-        busy = view.Locked = true; send.Content = "중단"; first.IsEnabled = second.IsEnabled = input.IsEnabled = false; status.Text = "쓰는 중…"; view.Begin(direction); request = new CancellationTokenSource();
+        // A guide already used by the last part is only for that part: asking for a new one clears it.
+        string text = guide.Text.Trim(); if (!again && !more && guideUsed) { guide.Text = ""; text = ""; }
+        string applied = again || more ? usedGuide : text;
+        busy = view.Locked = true; send.Content = "중단"; first.IsEnabled = second.IsEnabled = input.IsEnabled = goOn.IsEnabled = false; status.Text = more ? "이어 쓰는 중…" : "쓰는 중…"; view.Begin(more ? "" : direction); request = new CancellationTokenSource();
         try
         {
-            var turn = await buddy.WriteNovel(Page, cast, direction, request.Token, text => Dispatcher.BeginInvoke(() => view.Streaming(text)), text => Dispatcher.BeginInvoke(() => view.Thinking(text)));
-            written = true; if (!again) input.Clear(); status.Text = $"{turn.Assistant.Length:N0}자를 썼어요.";
+            var turn = await buddy.WriteNovel(Page, cast, direction, applied, more, request.Token, part => Dispatcher.BeginInvoke(() => view.Streaming(part)), part => Dispatcher.BeginInvoke(() => view.Thinking(part)));
+            written = true; if (!again && !more) input.Clear(); status.Text = $"{turn.Assistant.Length:N0}자" + (more ? "가 됐어요." : "를 썼어요.");
+            if (!more) { usedGuide = applied; guideUsed = applied.Length > 0; if (guideUsed && guide.Text.Trim() != applied) guide.Text = applied; Guide(); }
         }
         catch (OperationCanceledException) { status.Text = "쓰기를 멈췄어요. 저장하지 않았습니다."; view.Failed(); }
         catch (Exception e) { status.Text = "쓰지 못했어요. " + e.Message; view.Failed(); }
         finally
         {
-            request?.Dispose(); request = null; busy = view.Locked = false; send.Content = "쓰기"; first.IsEnabled = second.IsEnabled = input.IsEnabled = true;
+            request?.Dispose(); request = null; busy = view.Locked = false; send.Content = "쓰기"; first.IsEnabled = second.IsEnabled = input.IsEnabled = goOn.IsEnabled = true;
             if (written) Reload(); if (IsVisible) input.Focus();
         }
         return written;

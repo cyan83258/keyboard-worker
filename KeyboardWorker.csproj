@@ -30,5 +30,7 @@
   <!-- Accessories that come with the program and are sold in the shop: every PNG / JPG under Assets\Accessories (and accessories.json,
        which places them) is copied to "accessories" next to it. See Model\ShopGear.cs for the file names and the list. -->
   <ItemGroup><Content Include="Assets\Accessories\*.png;Assets\Accessories\*.jpg;Assets\Accessories\*.jpeg;Assets\Accessories\*.json" Link="accessories\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <!-- The typeface the novel is read in: Assets\Fonts is copied to "fonts" next to the program. -->
+  <ItemGroup><Content Include="Assets\Fonts\*.otf;Assets\Fonts\*.ttf" Link="fonts\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="Assets\pet.ico" LogicalName="KeyboardWorker.pet.ico" Condition="Exists('Assets\pet.ico')" /></ItemGroup>
 </Project>

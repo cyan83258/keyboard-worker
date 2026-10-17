@@ -62,7 +62,15 @@ public static class NovelTests
         Check(tail[^2] == new PromptMessage(PromptMessage.User, "둘이 화해한다") && tail[^1] == new PromptMessage(PromptMessage.Assistant, "루카은(는)") && tail.Any(m => m.Text.StartsWith("[사용자(나)]") && m.Text.Contains("고양이")), "Without the marker the story goes at the end; a prefill is the model's first words; the persona is told");
         Check(NovelPrompts.Fill("{{char}}·{{user}}·{{group}}·{{unknown}}", scene) == "루카·나·루카, 미오·{{unknown}}" && NovelPrompts.Normalize(null).Parts.Any(p => p.Identifier == "chatHistory") && NovelPrompts.Normalize(new NovelPromptSet { Parts = new() { new NovelPromptPart { Role = "weird", Content = null! } } }).Parts.Single() is { Role: PromptMessage.System, Content: "", Name: "프롬프트" }, "Unknown macros stay; an empty set falls back to the standard one; parts are cleaned");
 
-        // ---- sending any list of messages ----
+        // ---- a guide for one part, going on, and the prompt shaped as SillyTavern does ----
+        var guided = NovelPrompts.Build(set, scene with { Guide = "{{char}}이(가) 먼저 사과한다" });
+        int asked = guided.FindIndex(m => m.Text == "둘이 화해한다");
+        Check(guided[asked + 1] == new PromptMessage(PromptMessage.System, "[다음 전개 지시 · 이번 장면에만 적용]\n루카이(가) 먼저 사과한다") && !messages.Any(m => m.Text.Contains("다음 전개 지시")), "A guide follows what is asked now, and only when there is one");
+        Check(NovelPrompts.Build(set, scene with { Direction = NovelPrompts.Continue }).Any(m => m.Text == NovelPrompts.Continue), "Going on asks the model to continue the last part");
+        var raw = new[] { new PromptMessage("system", "a"), new PromptMessage("system", "b"), new PromptMessage("user", "c"), new PromptMessage("user", "d"), new PromptMessage("assistant", "e") };
+        Check(NovelPrompts.Shape(raw, true, false, false).Count == 5 && NovelPrompts.Shape(raw, true, true, false).Select(m => m.Text).SequenceEqual(new[] { "a\n\nb", "c", "d", "e" }) && NovelPrompts.Shape(raw, true, false, true).Select(m => m.Text).SequenceEqual(new[] { "a\n\nb", "c\n\nd", "e" }), "System messages in a row can be squashed, any role in a row merged");
+        Check(NovelPrompts.Shape(raw, false, false, false).All(m => m.Role != "system") && NovelPrompts.Shape(raw, false, false, true).First() == new PromptMessage("user", "a\n\nb\n\nc\n\nd"), "Without a system prompt, system messages go as the user's");
+
         var list = new[] { new PromptMessage(PromptMessage.System, "규칙"), new PromptMessage(PromptMessage.Assistant, "확인"), new PromptMessage(PromptMessage.System, "설정"), new PromptMessage(PromptMessage.User, "지시"), new PromptMessage(PromptMessage.User, "추가"), new PromptMessage(PromptMessage.Assistant, "이어서:") };
         string Body(string format, bool thoughts = false) { using var request = AiClient.Build(new AiConnection { Format = format, Model = "gemini-3-pro", Endpoint = "https://api.example.com/v1/{model}:generateContent", Header = "x-key" }, "k", list, 1000, false, thoughts); return request.Content!.ReadAsStringAsync().GetAwaiter().GetResult(); }
         using (var gemini = JsonDocument.Parse(Body("Gemini", true)))
@@ -86,8 +94,17 @@ public static class NovelTests
         string thought = ""; string text = SseReplies.Read(new MemoryStream(Encoding.UTF8.GetBytes(sse)), "Chat Completions", _ => { }, CancellationToken.None, null, t => thought = t).GetAwaiter().GetResult();
         Check(text == "이야기" && thought == "먼저 생각", "Thoughts arrive apart from the text while streaming");
 
+        // ---- the typeface the novel is read in ----
+        string bookFont = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Assets", "Fonts", "RIDIBatang.otf"));
+        if (File.Exists(bookFont))
+        {
+            var family = FontAssets.Get(bookFont); var face = family.GetTypefaces().First(); bool found = face.TryGetGlyphTypeface(out var glyphs);
+            Check(!ReferenceEquals(family, FontAssets.Standard) && found && glyphs.FontUri.AbsolutePath.EndsWith("RIDIBatang.otf", StringComparison.OrdinalIgnoreCase), "The novel's typeface is read from its file: " + family.Source + " -> " + (found ? glyphs.FontUri.ToString() : "nothing"));
+        }
+
         // ---- the novel's settings and rooms ----
         string home = Path.Combine(root, "novel"); var book = new NovelBook(home); var turn = new ChatTurn("지시", "본문", DateTimeOffset.Now);
+        Check(book.State.SystemPrompt && !book.State.Squash && !book.State.MergeRoles && book.State.Model == "", "A new novel sends system messages as they are, unjoined, with the connection's model");
         Check(book.State.Prompts.Parts.Count > 0 && book.State.MaxOutput == 4000 && book.State.Stream && !book.State.ShowThinking && NovelBook.Page("a", "") == "novel:a" && NovelBook.Page("a", "b") == "novel:a+b" && NovelBook.Page("a", "a") == "novel:a", "A new novel starts with the standard prompt and its own limits");
         book.State.Prompts = set; book.State.MaxContext = 1; book.State.Parameters = sampling.Parameters; book.Keep("novel:a", turn, "  생각  "); book.Keep("novel:a", turn with { At = turn.At.AddMinutes(1) }, " "); OrderedStore.FlushAsync().GetAwaiter().GetResult();
         var again = new NovelBook(home);

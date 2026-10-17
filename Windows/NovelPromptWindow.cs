@@ -14,7 +14,6 @@ public sealed class NovelPromptWindow : Window
 {
     readonly Buddy buddy; NovelPromptSet draft; readonly StackPanel list = new(); readonly TextBlock title = Pastel.Text("", 13), status = Pastel.Text("", 12);
     readonly TextBox name = new() { MaxLength = 60, Padding = new Thickness(6, 4, 6, 4) }, content = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontSize = 13, Padding = new Thickness(6), MaxLength = NovelPrompts.MaxContent };
-    readonly TextBox prefill = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 56, MaxLength = NovelPrompts.MaxContent, FontSize = 12.5, ToolTip = "AI 답변의 첫머리로 넣어 두면 그 뒤를 이어 써요 (SillyTavern의 assistant prefill). 비워 두면 쓰지 않아요." };
     readonly ComboBox role = new() { ItemsSource = new[] { "system", "user", "assistant" }, MinWidth = 120 }; readonly TextBlock markerNote = new() { Foreground = Pastel.Ink, Opacity = .75, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) };
     NovelPromptPart? chosen; bool filling, changed;
     public NovelPromptWindow(Buddy buddy)
@@ -24,7 +23,7 @@ public sealed class NovelPromptWindow : Window
         var load = Pastel.Button("SillyTavern 프리셋 불러오기…", Import); DockPanel.SetDock(load, Dock.Right); top.Children.Add(load); top.Children.Add(title);
         var footer = new StackPanel(); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer); footer.Children.Add(status);
         var buttons = new WrapPanel();
-        buttons.Children.Add(Pastel.Button("저장", () => { Apply(); buddy.Novel.State.Prompts = NovelPrompts.Normalize(draft.Snapshot()); buddy.Novel.Save(); changed = false; status.Text = "저장했어요. 다음에 쓰는 부분부터 적용돼요."; }));
+        buttons.Children.Add(Pastel.Button("저장", () => { Apply(); draft.Prefill = draft.Prefill.Length > 0 && draft.Name != buddy.Novel.State.Prompts.Name ? draft.Prefill : buddy.Novel.State.Prompts.Prefill; buddy.Novel.State.Prompts = NovelPrompts.Normalize(draft.Snapshot()); buddy.Novel.Save(); changed = false; status.Text = "저장했어요. 다음에 쓰는 부분부터 적용돼요."; }));
         buttons.Children.Add(Pastel.Button("조합된 프롬프트 보기", Preview, true)); buttons.Children.Add(Pastel.Button("기본 프롬프트로", () => { if (MessageBox.Show(this, "기본 소설 프롬프트로 바꿀까요? (저장해야 적용돼요)", "프롬프트", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return; draft = NovelPrompts.Standard(); changed = true; Fill(draft.Parts[0]); }, true));
         buttons.Children.Add(Pastel.Button("닫기", Close, true)); footer.Children.Add(buttons);
 
@@ -38,12 +37,9 @@ public sealed class NovelPromptWindow : Window
         var right = new DockPanel(); Grid.SetColumn(right, 1); body.Children.Add(right);
         var head = new StackPanel(); DockPanel.SetDock(head, Dock.Top); right.Children.Add(head);
         var line = new DockPanel(); DockPanel.SetDock(role, Dock.Right); role.Margin = new Thickness(8, 0, 0, 0); line.Children.Add(role); line.Children.Add(name); head.Children.Add(line); head.Children.Add(markerNote);
-        var tail = new StackPanel { Margin = new Thickness(0, 8, 0, 0) }; DockPanel.SetDock(tail, Dock.Bottom); right.Children.Add(tail);
-        tail.Children.Add(new TextBlock { Text = "답변 첫머리 (prefill)", Foreground = Pastel.Ink, FontSize = 12, Margin = new Thickness(0, 0, 0, 2) }); tail.Children.Add(prefill);
         content.Margin = new Thickness(0, 6, 0, 0); right.Children.Add(content);
         root.Children.Add(body);
         name.TextChanged += (_, _) => { if (!filling) changed = true; }; content.TextChanged += (_, _) => { if (!filling) changed = true; }; role.SelectionChanged += (_, _) => { if (!filling) changed = true; };
-        prefill.TextChanged += (_, _) => { if (!filling) changed = true; };
         Closing += (_, e) => { Apply(); if (changed && MessageBox.Show(this, "저장하지 않은 변경이 있어요. 저장하지 않고 닫을까요?", "프롬프트", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes) e.Cancel = true; };
         Pastel.Window(this, "소설 프롬프트", root, 1000, 780); MinWidth = 820; MinHeight = 560;
         Fill(draft.Parts.FirstOrDefault());
@@ -51,7 +47,7 @@ public sealed class NovelPromptWindow : Window
     // What is being edited goes into the part.
     void Apply()
     {
-        draft.Prefill = prefill.Text; if (chosen == null) return;
+        if (chosen == null) return;
         chosen.Name = name.Text.Trim().Length > 0 ? name.Text.Trim() : chosen.Name; chosen.Role = role.SelectedItem as string ?? chosen.Role; if (!chosen.Marker) chosen.Content = content.Text;
     }
     // The list, and the chosen part in the editor.
@@ -69,7 +65,7 @@ public sealed class NovelPromptWindow : Window
             row.Children.Add(label); row.MouseLeftButtonUp += (_, e) => { if (e.OriginalSource is not CheckBox) { Apply(); Fill(each); } };
             list.Children.Add(row);
         }
-        name.Text = part?.Name ?? ""; role.SelectedItem = part?.Role ?? PromptMessage.System; content.Text = part == null ? "" : part.Marker ? "" : part.Content; prefill.Text = draft.Prefill;
+        name.Text = part?.Name ?? ""; role.SelectedItem = part?.Role ?? PromptMessage.System; content.Text = part == null ? "" : part.Marker ? "" : part.Content;
         name.IsEnabled = role.IsEnabled = content.IsEnabled = part != null; role.Visibility = part?.Marker == true ? Visibility.Collapsed : Visibility.Visible; content.IsEnabled = part != null && !part.Marker;
         markerNote.Text = part?.Marker != true ? "{{char}} {{user}} 등은 캐릭터 이름과 내 호칭으로 바뀌어요." : part.Identifier switch
         {
@@ -108,7 +104,8 @@ public sealed class NovelPromptWindow : Window
     {
         Apply(); var cast = buddy.StageCharacters().Take(1).Select(c => c.Persona).ToArray();
         var scene = new NovelScene(cast, buddy.Chat.Preferences.Profile.UserName ?? "", buddy.Chat.Preferences.Profile.UserNotes ?? "", "(채팅방의 작가 노트)", "(방의 기억 요약)", new[] { new ChatTurn("(지난 지시)", "(지난번에 쓴 부분)", DateTimeOffset.Now) }, "(이번 지시)");
-        string text = string.Join("\n\n", NovelPrompts.Build(draft, scene).Select(m => $"── {m.Role} ──\n{m.Text}"));
+        var book = buddy.Novel.State; draft.Prefill = book.Prompts.Prefill;
+        string text = string.Join("\n\n", NovelPrompts.Shape(NovelPrompts.Build(draft, scene), book.SystemPrompt, book.Squash, book.MergeRoles).Select(m => $"── {m.Role} ──\n{m.Text}"));
         var box = new TextBox { Text = text, IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(18), FontSize = 12.5 };
         var window = new Window { Owner = this }; Pastel.Window(window, "조합된 프롬프트", box, 760, 760); window.ShowDialog();
     }

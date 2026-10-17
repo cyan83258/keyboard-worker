@@ -30,6 +30,8 @@ public sealed class PageFrame
         foreach (var (to, name, tip) in tabs)
         {
             var tab = Pastel.Button(name, () => { if (!busy()) buddy.SwitchPage(owner, to, character()); }, to != kind); tab.Padding = new Thickness(11, 5, 11, 5); tab.FontSize = 12; tab.Margin = new Thickness(0, 0, 3, 0); tab.ToolTip = tip;
+            // Not reachable by Tab: a tab is clicked, and no focus mark is ever drawn on one.
+            tab.Focusable = false; tab.FocusVisualStyle = null;
             if (to == kind) { tab.IsHitTestVisible = false; tab.FontWeight = FontWeights.Bold; } else tab.Opacity = .78;
             row.Children.Add(tab);
         }

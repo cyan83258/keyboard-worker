@@ -29,7 +29,8 @@ public sealed class NovelPromptSet
     public NovelPromptSet Snapshot() => new() { Name = Name, Prefill = Prefill, Parts = Parts.Select(p => p.Snapshot()).ToList() };
 }
 // What a request for the next part of the story is made of: who is in it, the user, the room's note and memory, the story so far and what to write now.
-public sealed record NovelScene(IReadOnlyList<Persona> Cast, string UserName, string UserNotes, string Note, string Summary, IReadOnlyList<ChatTurn> Story, string Direction);
+// Guide: a direction for this part only ("다음 전개 지시"), sent after the request and not kept in the story.
+public sealed record NovelScene(IReadOnlyList<Persona> Cast, string UserName, string UserNotes, string Note, string Summary, IReadOnlyList<ChatTurn> Story, string Direction, string Guide = "");
 // Settings read from a SillyTavern preset besides the prompts (null = the preset says nothing about it).
 public sealed record NovelSampling(AiParameters Parameters, int? MaxContext, int? MaxOutput, bool? Stream, bool? ShowThinking);
 
@@ -139,6 +140,21 @@ public static class NovelPrompts
             "trim" or "noop" => "", _ => m.Value
         });
     }
+    // Going on from where the last part stopped (SillyTavern's "continue").
+    public const string Continue = "[바로 앞 부분의 마지막 문장 바로 뒤에서 그대로 이어 쓰세요. 이미 쓴 문장을 되풀이하거나 새로 시작하지 마세요.]";
+    // The messages as the API settings want them: system messages sent as the user's (systemPrompt off), runs of system
+    // messages joined (squash), runs of any one role joined (merge) - SillyTavern's prompt post-processing.
+    public static List<PromptMessage> Shape(IEnumerable<PromptMessage> messages, bool systemPrompt, bool squash, bool merge)
+    {
+        var shaped = new List<PromptMessage>();
+        foreach (var message in messages)
+        {
+            var m = systemPrompt || message.Role != PromptMessage.System ? message : message with { Role = PromptMessage.User };
+            if (shaped.Count > 0 && shaped[^1].Role == m.Role && (merge || (squash && m.Role == PromptMessage.System))) shaped[^1] = shaped[^1] with { Text = shaped[^1].Text + "\n\n" + m.Text };
+            else shaped.Add(m);
+        }
+        return shaped;
+    }
     // What the user asked for now, as the last message of the story so far.
     public static string Asked(string direction) => direction.Trim().Length > 0 ? direction.Trim() : "(앞 장면에서 자연스럽게 이어서, 이야기를 한 걸음 진전시키는 다음 장면을 쓰세요.)";
     // The messages of one request: the parts that are on, in order, with the markers filled in. The story so far is cut
@@ -155,6 +171,7 @@ public static class NovelPrompts
                 if (scene.Summary.Trim().Length > 0) list.Add(new(PromptMessage.System, "[지금까지의 줄거리]\n" + scene.Summary.Trim()));
                 foreach (var turn in story) { list.Add(new(PromptMessage.User, Asked(turn.User))); list.Add(new(PromptMessage.Assistant, turn.Assistant)); }
                 list.Add(new(PromptMessage.User, Asked(scene.Direction)));
+                if (scene.Guide.Trim().Length > 0) list.Add(new(PromptMessage.System, "[다음 전개 지시 · 이번 장면에만 적용]\n" + Fill(scene.Guide.Trim(), scene)));
             }
             foreach (var part in parts)
             {

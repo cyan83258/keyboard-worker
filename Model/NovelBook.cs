@@ -10,6 +10,10 @@ namespace KeyboardWorker;
 public sealed class NovelState
 {
     public string Connection { get; set; } = "";              // name of the AI connection; "" = the one in use for chat
+    public string Model { get; set; } = "";                   // another model of that connection, for the novel only; "" = the connection's own
+    public bool SystemPrompt { get; set; } = true;            // send system messages as such (off: as the user's)
+    public bool Squash { get; set; }                          // join system messages that come in a row
+    public bool MergeRoles { get; set; }                      // join any messages of one role that come in a row
     public int MaxContext { get; set; } = 32000;              // tokens a request may hold; older parts of the story are left out first
     public int MaxOutput { get; set; } = 4000;                // tokens of one new part
     public AiParameters Parameters { get; set; } = new();     // temperature and the rest, for the novel only
@@ -33,7 +37,7 @@ public sealed class NovelBook
     }
     void Normalize()
     {
-        var s = State; s.Connection = SafeFiles.OneLine(s.Connection, 80); s.MaxContext = Math.Clamp(s.MaxContext, 2000, 2000000); s.MaxOutput = Math.Clamp(s.MaxOutput, 256, 64000);
+        var s = State; s.Connection = SafeFiles.OneLine(s.Connection, 80); s.Model = SafeFiles.OneLine(s.Model, 200); s.MaxContext = Math.Clamp(s.MaxContext, 2000, 2000000); s.MaxOutput = Math.Clamp(s.MaxOutput, 256, 64000);
         s.Parameters ??= new(); s.Parameters.Normalize(); s.Prompts = NovelPrompts.Normalize(s.Prompts); s.First ??= ""; s.Second ??= ""; s.KeepTurns = Math.Clamp(s.KeepTurns, 30, StageLog.MaxKeep);
         s.Thoughts = (s.Thoughts ?? new()).Where(p => p.Value != null).TakeLast(MaxThoughts).ToDictionary(p => p.Key, p => p.Value[..Math.Min(p.Value.Length, MaxThought)]);
     }

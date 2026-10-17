@@ -15,3 +15,7 @@ work/
 .vs/
 *.user
 Thumbs.db
+
+# The novel's typeface is bundled into builds made on this PC but not published in the repository
+Assets/Fonts/*.otf
+Assets/Fonts/*.ttf

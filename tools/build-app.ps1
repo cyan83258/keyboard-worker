@@ -41,4 +41,7 @@ if (Test-Path (Join-Path $out 'backgrounds')) { Copy-Item (Join-Path $out 'backg
 # The same for the accessories sold in the shop (Assets\Accessories).
 $gear = Join-Path $app 'accessories'; if (Test-Path $gear) { [IO.Directory]::Delete($gear, $true) }
 if (Test-Path (Join-Path $out 'accessories')) { Copy-Item (Join-Path $out 'accessories') $gear -Recurse -Force }
+# And the typeface the novel is read in (Assets\Fonts).
+$type = Join-Path $app 'fonts'; if (Test-Path $type) { [IO.Directory]::Delete($type, $true) }
+if (Test-Path (Join-Path $out 'fonts')) { Copy-Item (Join-Path $out 'fonts') $type -Recurse -Force }
 Write-Host "app\ updated: $((Get-Item (Join-Path $app 'KeyboardWorker.dll')).LastWriteTime)"
