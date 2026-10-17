@@ -31,6 +31,8 @@ public static class Maintenance
         if (args.Contains("--image-diet")) { Exclusive("image-diet-result.txt", ImageFolderDiet); return true; }
         if (args.Contains("--clean-unused")) { Exclusive("clean-unused-result.txt", CleanUnused); return true; }
         if (args.Contains("--ai-probe")) { File.WriteAllLines(Beside("ai-probe.txt"), Wait(System.Threading.Tasks.Task.Run(() => AiProbe(args.SkipWhile(a => a != "--ai-probe").Skip(1).FirstOrDefault() ?? "")))); return true; }
+        // Reads a SillyTavern preset the way the novel window does and says what came out (names and switches only, not the texts).
+        if (args.Contains("--prompt-probe")) { File.WriteAllLines(Beside("prompt-probe.txt"), PromptProbe(args.SkipWhile(a => a != "--prompt-probe").Skip(1).FirstOrDefault() ?? "")); return true; }
         if (args.Contains("--update-probe")) { File.WriteAllLines(Beside("update-probe.txt"), Wait(System.Threading.Tasks.Task.Run(UpdateProbe))); return true; }
         if (args.Contains("--make-icon")) { PetIcon.Generate(args.Length > 1 ? args[1] : Beside("Assets")); return true; }
         return false;
@@ -136,5 +138,20 @@ public static class Maintenance
             $"sent to recycle bin: {result.Removed}, skipped: {result.Skipped}, failed: {result.Failed}",
             $"files in use: {used.Length}, missing after cleanup: {used.Count(p => !File.Exists(p))}"
         };
+    }
+
+    static string[] PromptProbe(string file)
+    {
+        try
+        {
+            var (set, sampling) = NovelPrompts.ReadSillyTavern(File.ReadAllText(file), Path.GetFileNameWithoutExtension(file)); var p = sampling.Parameters;
+            var lines = new System.Collections.Generic.List<string> { $"set: {set.Name} · parts {set.Parts.Count} · on {set.Parts.Count(x => x.Enabled)} · prefill {set.Prefill.Length} chars" };
+            lines.AddRange(set.Parts.Select((x, i) => $"{i + 1,2}. [{(x.Enabled ? "on " : "off")}] {(x.Marker ? "marker " : x.Role + " ")}{x.Identifier} · {x.Name} · {x.Content.Length} chars"));
+            lines.Add($"sampling: temperature {p.Temperature} · top_p {p.TopP} · top_k {p.TopK} · freq {p.FrequencyPenalty} · pres {p.PresencePenalty} · rep {p.RepetitionPenalty} · min_p {p.MinP} · top_a {p.TopA} · effort '{p.ReasoningEffort}' · context {sampling.MaxContext} · output {sampling.MaxOutput} · stream {sampling.Stream} · thoughts {sampling.ShowThinking}");
+            var scene = new NovelScene(new[] { new Persona { Name = "루카" } }, "나", "", "노트", "", new[] { new ChatTurn("지시", "본문", DateTimeOffset.Now) }, "다음");
+            lines.Add("built: " + string.Join(" > ", NovelPrompts.Build(set, scene).Select(m => m.Role)));
+            return lines.ToArray();
+        }
+        catch (Exception e) { return new[] { "failed: " + e.Message }; }
     }
 }

@@ -48,6 +48,9 @@ public sealed partial class Buddy
         OpenPresets(); Pastel.Capture(presetsWindow!, Path.Combine(AppContext.BaseDirectory, "ui-presets.png"));
         OpenGame(); Pastel.Capture(gameWindow!, Path.Combine(AppContext.BaseDirectory, "ui-game.png")); gameWindow!.CaptureTabs(AppContext.BaseDirectory);
         var gearEditor = new CustomGearWindow(Game); gearEditor.Show(); Pastel.Capture(gearEditor, Path.Combine(AppContext.BaseDirectory, "ui-custom-gear.png")); gearEditor.Close();
+        var novelView = new NovelWindow(this); novelView.Show(); novelView.UpdateLayout(); Pastel.Capture(novelView, Path.Combine(AppContext.BaseDirectory, "ui-novel.png"));
+        foreach (var (made, file) in new (Window, string)[] { (new NovelPromptWindow(this), "ui-novel-prompt.png"), (new NovelApiWindow(this), "ui-novel-api.png") }) { made.Owner = novelView; made.Show(); made.UpdateLayout(); Pastel.Capture(made, Path.Combine(AppContext.BaseDirectory, file)); made.Close(); }
+        novelView.Close();
         var speechView = new SpeechWindow(this); speechView.Show(); speechView.UpdateLayout(); Pastel.Capture(speechView, Path.Combine(AppContext.BaseDirectory, "ui-speech.png")); speechView.Close();
         var placeView = new GearPlaceWindow(this); placeView.Show(); placeView.UpdateLayout(); Pastel.Capture(placeView, Path.Combine(AppContext.BaseDirectory, "ui-gear-place.png")); placeView.Close();
         try { string old = Path.Combine(AppContext.BaseDirectory, "ui-test-data"); if (Directory.Exists(old)) Directory.Delete(old, true); } catch (IOException) { }

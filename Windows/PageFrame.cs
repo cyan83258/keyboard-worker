@@ -11,7 +11,7 @@ public sealed class PageFrame
 {
     static readonly (string Kind, string Name, string Tip)[] tabs =
     {
-        (StageMode.Stage, "마주 보기", "스탠딩 그림과 대사창으로 마주 보고 이야기해요"), (StageMode.Messenger, "문자", "메신저로 문자를 주고받아요 (마주 보기와는 방도 설정도 따로예요)"), (StageMode.Pair, "둘이서", "두 캐릭터가 나 없이 둘이서 이야기해요")
+        (StageMode.Stage, "마주 보기", "스탠딩 그림과 대사창으로 마주 보고 이야기해요"), (StageMode.Messenger, "문자", "메신저로 문자를 주고받아요 (마주 보기와는 방도 설정도 따로예요)"), (StageMode.Pair, "둘이서", "두 캐릭터가 나 없이 둘이서 이야기해요"), (StageMode.Novel, "소설", "캐릭터가 등장하는 소설을 써요 (방도 프롬프트도 API 설정도 따로예요)")
     };
     // The three windows wear the same title bar, so going from one to another does not change its colour.
     public const bool Sky = true;

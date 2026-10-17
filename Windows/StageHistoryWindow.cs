@@ -43,8 +43,8 @@ public sealed class StageHistoryWindow : Window
         root.Children.Add(Pastel.Scroll(list));
 
         filling = true;
-        // Text messages keep no record here: they are read, edited and deleted in their own window.
-        var keys = log.Threads.Where(t => StageMode.Kind(t) != StageMode.Messenger).ToList(); if (thread.Length > 0 && !keys.Contains(thread)) keys.Insert(0, thread);
+        // Text messages and novels keep no record here: they are read, edited and deleted in their own windows.
+        var keys = log.Threads.Where(t => StageMode.Kind(t) is StageMode.Stage or StageMode.Pair).ToList(); if (thread.Length > 0 && !keys.Contains(thread)) keys.Insert(0, thread);
         var choices = keys.Select(k => new Choice(k, Title(k))).OrderBy(c => c.Label, StringComparer.CurrentCulture).ToArray();
         threads.ItemsSource = choices; threads.SelectedItem = choices.FirstOrDefault(c => c.Key == thread) ?? choices.FirstOrDefault();
         filling = false;

@@ -9,11 +9,12 @@ namespace KeyboardWorker;
 
 public static class SseReplies
 {
-    public static async Task<string> Read(Stream stream, string format, Action<string> progress, CancellationToken cancellation, Action<JsonElement>? usage = null)
+    // thinking: what the model thought, as it arrives (when the server sends it).
+    public static async Task<string> Read(Stream stream, string format, Action<string> progress, CancellationToken cancellation, Action<JsonElement>? usage = null, Action<string>? thinking = null)
     {
         using var bounded = new BoundedStream(stream, 2 * 1024 * 1024);
         using var reader = new StreamReader(bounded, Encoding.UTF8, true, 4096, true);
-        var record = new StringBuilder(); var answer = new StringBuilder(); bool finished = false, limited = false;
+        var record = new StringBuilder(); var answer = new StringBuilder(); var thought = new StringBuilder(); bool finished = false, limited = false; long lastThought = long.MinValue / 2;
         long lastReport = long.MinValue / 2; string lastText = "";
         while (true)
         {
@@ -24,6 +25,7 @@ public static class SseReplies
             if (record.Length > 256 * 1024) throw new InvalidOperationException("스트리밍 응답 조각이 너무 큽니다.");
         }
         if (!finished) throw new InvalidOperationException("답변 수신 중 연결이 끊겼습니다. 미완성 답변은 대화로 저장하지 않았어요.");
+        if (thinking != null && thought.Length > 0) thinking(thought.ToString());
         string result = answer.ToString(); if (result != lastText) progress(result);
         if (limited) throw new ReplyLimitException(result);
         if (string.IsNullOrWhiteSpace(result)) throw new InvalidOperationException("AI가 텍스트 답변을 반환하지 않았습니다."); return result;
@@ -32,6 +34,10 @@ public static class SseReplies
             if (json.Trim() == "[DONE]") { finished = true; return; }
             using var doc = JsonDocument.Parse(json); var root = doc.RootElement; string delta = "";
             usage?.Invoke(root);
+            if (thinking != null && AiClient.Thoughts(format, root) is { Length: > 0 } more)
+            {
+                thought.Append(more); long at = Environment.TickCount64; if (at - lastThought >= 100) { lastThought = at; thinking(thought.ToString()); }
+            }
             if (root.TryGetProperty("error", out _) || (root.TryGetProperty("type", out var failure) && failure.GetString() is "error" or "response.failed"))
                 throw new InvalidOperationException("AI가 답변 생성을 완료하지 못했습니다. 연결 설정 또는 출력 한도를 확인해 주세요.");
             if (format == "Responses")

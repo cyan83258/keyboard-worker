@@ -104,7 +104,7 @@ public sealed partial class Buddy
     // A room read from a file becomes a new room of the page, with its talk, note and memory.
     public StageRoom ImportRoom(string page, StageArchive.RoomFile file)
     {
-        string kind = StageMode.Kind(page); if (file.Kind.Length > 0 && file.Kind != kind) throw new InvalidOperationException("다른 종류의 방이에요. " + (file.Kind == StageMode.Pair ? "둘만의 페이지" : file.Kind == StageMode.Messenger ? "문자 메시지" : "캐릭터 페이지(마주 보기)") + "에서 불러와 주세요.");
+        string kind = StageMode.Kind(page); if (file.Kind.Length > 0 && file.Kind != kind) throw new InvalidOperationException("다른 종류의 방이에요. " + (file.Kind == StageMode.Pair ? "둘만의 페이지" : file.Kind == StageMode.Messenger ? "문자 메시지" : file.Kind == StageMode.Novel ? "소설" : "캐릭터 페이지(마주 보기)") + "에서 불러와 주세요.");
         var room = Rooms.Add(page, file.Name); room.Note = file.Note; room.Summary = file.Summary; if (file.Summary.Trim().Length > 0 && file.Turns.Length > 0) room.SummarizedAt = file.Turns.Max(t => t.At);
         Rooms.Save(); StageTalks.Import(StageRooms.Thread(page, room), file.Turns); return room;
     }
@@ -122,9 +122,9 @@ public sealed partial class Buddy
     }
     public void SwitchPage(Window from, string kind, string? id)
     {
-        Window? Target() => kind == StageMode.Pair ? pairStage : kind == StageMode.Messenger ? messenger : characterWindow;
+        Window? Target() => kind == StageMode.Pair ? pairStage : kind == StageMode.Messenger ? messenger : kind == StageMode.Novel ? novelWindow : characterWindow;
         bool fresh = Target() == null; placeLike = from;
-        try { if (kind == StageMode.Pair) OpenPairPage(); else if (kind == StageMode.Messenger) OpenMessenger(id); else OpenCharacter(id); } finally { placeLike = null; }
+        try { if (kind == StageMode.Pair) OpenPairPage(); else if (kind == StageMode.Messenger) OpenMessenger(id); else if (kind == StageMode.Novel) OpenNovel(id); else OpenCharacter(id); } finally { placeLike = null; }
         var target = Target(); if (target == null || ReferenceEquals(target, from)) return;
         if (!fresh) { Place(target, from); from.Close(); return; }
         void Leave(object? sender, EventArgs e) { target.ContentRendered -= Leave; from.Close(); target.Activate(); }
@@ -140,7 +140,7 @@ public sealed partial class Buddy
         Open(ref characterWindow, () => new CharacterWindow(this), w => characterWindow = w);
         if (id != null) (characterWindow as CharacterWindow)?.Select(id);
     }
-    void CloseStageWindows() { characterWindow?.Close(); giftWindow?.Close(); pairStage?.Close(); messenger?.Close(); }
+    void CloseStageWindows() { characterWindow?.Close(); giftWindow?.Close(); pairStage?.Close(); messenger?.Close(); novelWindow?.Close(); }
 
     // ---- what mod files add ----
     public bool OwnsPack(LinePack pack) => pack.Price == 0 || Progress.IsUnlocked(LinePacks.Key(pack.Id));

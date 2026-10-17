@@ -125,7 +125,7 @@ public sealed class StageLog
 // threads. One of each is built in; mod files add more.
 public sealed record StageMode(string Id, string Name, string Layout, string Prompt, string Length = "", string Source = "")
 {
-    public const string Stage = "stage", Messenger = "messenger", Pair = "pair";
+    public const string Stage = "stage", Messenger = "messenger", Pair = "pair", Novel = "novel";
     public static readonly StageMode[] BuiltIn = { new("stage", "마주 보기", Stage, ""), new("sms", "문자 메시지", Messenger, "") };
     public static IReadOnlyList<StageMode> All => BuiltIn.Concat(ModStore.Current.PageModes).ToArray();
     public static StageMode[] Of(string layout) => All.Where(m => m.Layout == layout).ToArray();
@@ -133,10 +133,10 @@ public sealed record StageMode(string Id, string Name, string Layout, string Pro
     public static StageMode Find(string? id, string layout = Stage) { var modes = Of(layout); return modes.FirstOrDefault(m => m.Id == id) ?? modes[0]; }
     // The key of this mode's page with a character (its rooms and threads hang on it).
     public string Thread(string characterId) => Id == BuiltIn[0].Id ? characterId : characterId + "|" + Id;
-    // Which of the three kinds of page a key or thread belongs to: Stage, Messenger or Pair.
+    // Which kind of page a key or thread belongs to: Stage, Messenger, Pair or Novel.
     public static string Kind(string thread)
     {
-        string key = StageRooms.Split(thread).Key; if (key.StartsWith("pair:", StringComparison.Ordinal)) return Pair;
+        string key = StageRooms.Split(thread).Key; if (key.StartsWith("pair:", StringComparison.Ordinal)) return Pair; if (key.StartsWith("novel:", StringComparison.Ordinal)) return Novel;
         int bar = key.IndexOf('|'); return bar >= 0 && All.FirstOrDefault(m => m.Id == key[(bar + 1)..])?.Layout == Messenger ? Messenger : Stage;
     }
 }
