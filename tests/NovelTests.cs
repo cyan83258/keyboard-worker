@@ -110,6 +110,37 @@ public static class NovelTests
         var again = new NovelBook(home);
         Check(again.State.Prompts.Name == "테스트 프리셋" && again.State.Prompts.Parts.Count == 8 && again.State.MaxContext == 2000 && again.State.Parameters.Temperature == 1.2 && again.Thought("novel:a", turn) == "생각" && again.State.Thoughts.Count == 1, "The novel's settings and what the model thought are kept");
         Check(StageMode.Kind("novel:a") == StageMode.Novel && StageMode.Kind("novel:a+b#12345678") == StageMode.Novel && StageMode.Kind("pair:a+b") == StageMode.Pair, "The novel is a kind of page of its own");
+        Check(!book.State.Welcomed && !again.State.Welcomed, "The note about the model waits to be read");
+
+        // ---- summaries ----
+        var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var parts = Enumerable.Range(0, 12).Select(i => new ChatTurn("", "부분 " + (i + 1), start.AddMinutes(i))).ToArray();
+        var options = NovelSummaries.Normalize(new NovelSummaryOptions { Auto = true, Every = 4, Group = 3, KeepRecent = 2, Context = 1 });
+        NovelSummary Over(int a, int b, string text) => new(parts[a].At.UtcTicks, parts[b].At.UtcTicks, text, start);
+        var nothing = Array.Empty<NovelSummary>();
+        Check(NovelSummaries.Pending(parts, nothing).Length == 12 && NovelSummaries.Ready(options, parts, nothing).Length == 10 && NovelSummaries.Due(options, parts, nothing), "Waiting parts, all but the newest, are due once there are enough");
+        Check(!NovelSummaries.Due(new NovelSummaryOptions { Auto = false }, parts, nothing), "Nothing is summarized by itself when that is off");
+        var runs = NovelSummaries.Runs(new[] { 0, 1, 2, 3, 4, 7, 8 }, 3);
+        Check(runs.Count == 3 && runs[0].SequenceEqual(new[] { 0, 1, 2 }) && runs[1].SequenceEqual(new[] { 3, 4 }) && runs[2].SequenceEqual(new[] { 7, 8 }), "Runs keep neighbours together, at most a group long");
+        var first = Over(0, 2, "* 시나리오: 처음"); var second = Over(3, 5, "* 시나리오: 그다음");
+        Check(NovelSummaries.Label(first, parts) == "#1~3" && NovelSummaries.Label(Over(4, 4, "x"), parts) == "#5" && NovelSummaries.Label(first, parts.Skip(3).ToArray()) == "(지운 부분)", "Summaries are labelled by the numbers of their parts");
+        var summarized = new[] { first, second };
+        Check(NovelSummaries.Pending(parts, summarized).Length == 6 && NovelSummaries.Ready(options, parts, summarized).SequenceEqual(new[] { 6, 7, 8, 9 }), "Summarized parts no longer wait");
+        var (system, ask) = NovelSummaries.Request(options, parts, new[] { 6, 7 }, summarized, "루카, 미오");
+        Check(system.Contains("* 시나리오:") && system.Contains("* 관계:") && !system.Contains("* 감정:") && ask.Contains("[등장인물] 루카, 미오") && ask.Contains("#7\n부분 7") && ask.Contains("#8\n부분 8") && ask.Contains("그다음") && !ask.Contains("처음"), "A request asks for the headings that are on, numbers the parts and shows the summary before them");
+        Check(NovelSummaries.Clean("```\n#7~8 요약\n* 시나리오: 끝\n```") == "* 시나리오: 끝", "A fence or a number header the model adds is taken off");
+        var (digest, sent) = NovelSummaries.Apply(options, parts, summarized);
+        Check(digest.StartsWith("[시나리오 요약]") && digest.IndexOf("### #1~3") < digest.IndexOf("### #4~6") && sent.Length == 6 && sent[0].Assistant == "부분 7", "Summarized parts go as their summaries, the rest as they are");
+        Check(NovelSummaries.Apply(options, parts.Take(5).ToArray(), summarized).Story.Length == 2, "The newest parts are sent as they are even when summarized");
+        Check(NovelSummaries.Apply(new NovelSummaryOptions { Inject = false }, parts, summarized).Story.Length == 12 && NovelSummaries.Apply(new NovelSummaryOptions { Budget = 500 }, parts, new[] { Over(0, 2, new string('가', 4000)) }).Digest == "", "Summaries are left out when switched off or over the budget");
+        var digestScene = NovelPrompts.Build(NovelPrompts.Standard(), new NovelScene(Array.Empty<Persona>(), "나", "", "", "", sent, "", "", digest), 100000);
+        string sentText = string.Join("\n", digestScene.Select(m => m.Text));
+        Check(sentText.Contains("### #1~3") && sentText.Contains("부분 7") && !sentText.Contains("부분 2\n"), "The novel's request carries the digest in place of the summarized parts");
+        book.Keep("novel:a", first); book.Keep("novel:a", second); book.Keep("novel:a", Over(6, 8, "셋째")); book.Keep("novel:a", Over(1, 2, "겹침"));
+        Check(book.SummariesOf("novel:a").Count == 3 && book.SummariesOf("novel:a")[0].Text == "겹침" && !book.SummariesOf("novel:a").Contains(first), "A new summary replaces the ones it overlaps");
+        var kept = book.SummariesOf("novel:a")[0]; book.Rewrite("novel:a", kept, "  고침  "); OrderedStore.FlushAsync().GetAwaiter().GetResult();
+        var reread = new NovelBook(home);
+        Check(reread.SummariesOf("novel:a").Count == 3 && reread.SummariesOf("novel:a")[0].Text == "고침" && reread.Forget("novel:a", reread.SummariesOf("novel:a")[0]) && reread.SummariesOf("novel:a").Count == 2 && reread.SummariesOf("novel:b").Count == 0, "Summaries are kept, edited and forgotten per story");
         return count;
     }
 }

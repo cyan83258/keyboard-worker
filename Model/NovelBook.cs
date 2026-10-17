@@ -24,6 +24,9 @@ public sealed class NovelState
     public string Second { get; set; } = "";
     public int KeepTurns { get; set; } = StageLog.Keep;       // parts of a story a room keeps
     public Dictionary<string, string> Thoughts { get; set; } = new();   // "thread|ticks" -> what the model thought for that part
+    public NovelSummaryOptions Summary { get; set; } = new();           // how the story is summarized (NovelSummaries)
+    public Dictionary<string, List<NovelSummary>> Summaries { get; set; } = new();   // by thread, in the order of the story
+    public bool Welcomed { get; set; }                                  // the first-time note about the model was shown
 }
 // The novel's settings (novel.json). The story itself is kept in the page talks (StageLog) under the novel's own rooms.
 public sealed class NovelBook
@@ -39,6 +42,8 @@ public sealed class NovelBook
     {
         var s = State; s.Connection = SafeFiles.OneLine(s.Connection, 80); s.Model = SafeFiles.OneLine(s.Model, 200); s.MaxContext = Math.Clamp(s.MaxContext, 2000, 2000000); s.MaxOutput = Math.Clamp(s.MaxOutput, 256, 64000);
         s.Parameters ??= new(); s.Parameters.Normalize(); s.Prompts = NovelPrompts.Normalize(s.Prompts); s.First ??= ""; s.Second ??= ""; s.KeepTurns = Math.Clamp(s.KeepTurns, 30, StageLog.MaxKeep);
+        s.Summary = NovelSummaries.Normalize(s.Summary);
+        s.Summaries = (s.Summaries ?? new()).Where(p => p.Value != null).ToDictionary(p => p.Key, p => p.Value.Where(x => x != null && x.Text != null && x.From <= x.To).OrderBy(x => x.From).TakeLast(NovelSummaries.MaxEntries).ToList());
         s.Thoughts = (s.Thoughts ?? new()).Where(p => p.Value != null).TakeLast(MaxThoughts).ToDictionary(p => p.Key, p => p.Value[..Math.Min(p.Value.Length, MaxThought)]);
     }
     public static string Key(string thread, ChatTurn turn) => thread + "|" + turn.At.UtcTicks;
@@ -49,6 +54,15 @@ public sealed class NovelBook
         if (State.Thoughts.Count > MaxThoughts) foreach (var old in State.Thoughts.Keys.Take(State.Thoughts.Count - MaxThoughts).ToArray()) State.Thoughts.Remove(old);
         Save();
     }
+    public IReadOnlyList<NovelSummary> SummariesOf(string thread) => State.Summaries.TryGetValue(thread, out var list) ? list : Array.Empty<NovelSummary>();
+    // Keeps a summary of a run of parts; one that covered the same parts before is replaced.
+    public void Keep(string thread, NovelSummary summary)
+    {
+        if (!State.Summaries.TryGetValue(thread, out var list)) State.Summaries[thread] = list = new();
+        list.RemoveAll(s => s.From <= summary.To && s.To >= summary.From); list.Add(summary); list.Sort((a, b) => a.From.CompareTo(b.From)); Save();
+    }
+    public bool Forget(string thread, NovelSummary summary) { bool gone = State.Summaries.TryGetValue(thread, out var list) && list.Remove(summary); if (gone) Save(); return gone; }
+    public void Rewrite(string thread, NovelSummary summary, string text) { if (!State.Summaries.TryGetValue(thread, out var list) || list.IndexOf(summary) is not (>= 0 and var at)) return; list[at] = summary with { Text = text.Trim() }; Save(); }
     public void Save() { Normalize(); OrderedStore.SaveJson(path, State); }
     // The key of the novel page of these characters (its rooms and threads hang on it).
     public static string Page(string first, string second) => "novel:" + first + (second.Length > 0 && second != first ? "+" + second : "");

@@ -30,7 +30,8 @@ public sealed class NovelPromptSet
 }
 // What a request for the next part of the story is made of: who is in it, the user, the room's note and memory, the story so far and what to write now.
 // Guide: a direction for this part only ("다음 전개 지시"), sent after the request and not kept in the story.
-public sealed record NovelScene(IReadOnlyList<Persona> Cast, string UserName, string UserNotes, string Note, string Summary, IReadOnlyList<ChatTurn> Story, string Direction, string Guide = "");
+// Digest: the story's summaries (NovelSummaries.Apply), sent in place of the parts they cover.
+public sealed record NovelScene(IReadOnlyList<Persona> Cast, string UserName, string UserNotes, string Note, string Summary, IReadOnlyList<ChatTurn> Story, string Direction, string Guide = "", string Digest = "");
 // Settings read from a SillyTavern preset besides the prompts (null = the preset says nothing about it).
 public sealed record NovelSampling(AiParameters Parameters, int? MaxContext, int? MaxOutput, bool? Stream, bool? ShowThinking);
 
@@ -169,6 +170,7 @@ public static class NovelPrompts
             void Story()
             {
                 if (scene.Summary.Trim().Length > 0) list.Add(new(PromptMessage.System, "[지금까지의 줄거리]\n" + scene.Summary.Trim()));
+                if (scene.Digest.Trim().Length > 0) list.Add(new(PromptMessage.System, scene.Digest.Trim()));
                 foreach (var turn in story) { list.Add(new(PromptMessage.User, Asked(turn.User))); list.Add(new(PromptMessage.Assistant, turn.Assistant)); }
                 list.Add(new(PromptMessage.User, Asked(scene.Direction)));
                 if (scene.Guide.Trim().Length > 0) list.Add(new(PromptMessage.System, "[다음 전개 지시 · 이번 장면에만 적용]\n" + Fill(scene.Guide.Trim(), scene)));

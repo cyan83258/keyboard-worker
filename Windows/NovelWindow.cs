@@ -37,7 +37,13 @@ public sealed class NovelWindow : Window
         frame = new PageFrame(buddy, this, StageMode.Novel, () => busy, Enter, () => Cast.FirstOrDefault()?.Id);
         var with = new TextBlock { Text = "＋", Foreground = Pastel.Hot, FontWeight = FontWeights.Bold, FontSize = 16, Margin = new Thickness(8, 0, 8, 0), ToolTip = "함께 등장할 캐릭터 (두 명까지)" };
         frame.Left(first); frame.Left(with); frame.Left(second);
-        frame.Tool("프롬프트", "소설에 쓰는 프롬프트: 항목 켜고 끄기 · 순서 · 편집 · SillyTavern 프리셋 불러오기", () => { if (busy) return; new NovelPromptWindow(buddy) { Owner = this, ShowInTaskbar = false }.ShowDialog(); });
+        frame.Tool("요약", "지금까지의 이야기를 요약해 두고, 요약한 부분은 요약으로 보내 긴 이야기도 이어 갈 수 있게 해요", () =>
+        {
+            if (busy || Page.Length == 0) return; var cast = Cast;
+            new NovelSummaryWindow(buddy, Thread, cast, string.Join(" ♡ ", cast.Select(c => c.Name))) { Owner = this, ShowInTaskbar = false }.ShowDialog();
+            Reload();
+        });
+        frame.Tool("프롬프트","소설에 쓰는 프롬프트: 항목 켜고 끄기 · 순서 · 편집 · SillyTavern 프리셋 불러오기", () => { if (busy) return; new NovelPromptWindow(buddy) { Owner = this, ShowInTaskbar = false }.ShowDialog(); });
         frame.Tool("API 설정", "소설 전용 AI 연결 · 모델 · 컨텍스트와 응답 길이 · 샘플링 · 추론", () =>
         {
             if (busy) return; new NovelApiWindow(buddy) { Owner = this, ShowInTaskbar = false }.ShowDialog();
@@ -61,7 +67,15 @@ public sealed class NovelWindow : Window
         stream.IsChecked = book.Stream; thinking.IsChecked = book.ShowThinking;
         stream.Click += (_, _) => { book.Stream = stream.IsChecked == true; buddy.Novel.Save(); };
         thinking.Click += (_, _) => { book.ShowThinking = view.ShowThinking = thinking.IsChecked == true; buddy.Novel.Save(); Reload(); };
-        frame.Root.Children.Add(new Border { Child = view, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.5, 1.5, 3, 3.5), CornerRadius = new CornerRadius(12), ClipToBounds = true });
+        // Once, the first time: a note that a novel wants a capable model.
+        if (!book.Welcomed)
+        {
+            var note = new DockPanel(); var close = Pastel.Button("알겠어요", () => { }, true); close.Padding = new Thickness(10, 3, 10, 4); close.FontSize = 12; DockPanel.SetDock(close, Dock.Right); note.Children.Add(close);
+            note.Children.Add(new TextBlock { Text = "소설은 긴 이야기의 흐름과 인물을 함께 붙잡아야 해서, 지능이 높은 모델(각 회사의 최상위 모델)을 쓸수록 훨씬 잘 써요. 'API 설정'에서 소설에만 쓸 모델을 따로 고를 수 있어요.", Foreground = Pastel.Ink, FontSize = 12.5, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+            var card = new Border { Child = note, BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.2), CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 7, 10, 7), Margin = new Thickness(0, 0, 0, 8) };
+            close.Click += (_, _) => { card.Visibility = Visibility.Collapsed; book.Welcomed = true; buddy.Novel.Save(); }; DockPanel.SetDock(card, Dock.Top); frame.Root.Children.Add(card);
+        }
+        frame.Root.Children.Add(new Border { Child = view,BorderBrush = Pastel.Line, BorderThickness = new Thickness(1.5, 1.5, 3, 3.5), CornerRadius = new CornerRadius(12), ClipToBounds = true });
         view.ShowThinking = book.ShowThinking; view.Thought = turn => buddy.Novel.Thought(Thread, turn);
         view.Edit += Edit; view.Delete += Delete; view.Again += async () => await Again();
 
@@ -120,7 +134,7 @@ public sealed class NovelWindow : Window
         // A guide already used by the last part is only for that part: asking for a new one clears it.
         string text = guide.Text.Trim(); if (!again && !more && guideUsed) { guide.Text = ""; text = ""; }
         string applied = again || more ? usedGuide : text;
-        busy = view.Locked = true; send.Content = "중단"; first.IsEnabled = second.IsEnabled = input.IsEnabled = goOn.IsEnabled = false; status.Text = more ? "이어 쓰는 중…" : "쓰는 중…"; view.Begin(more ? "" : direction); request = new CancellationTokenSource();
+        busy = view.Locked = true; send.Content = "중단"; first.IsEnabled = second.IsEnabled = input.IsEnabled = goOn.IsEnabled = false; status.Text = more ? "이어 쓰는 중…" : "쓰는 중…"; view.Begin(more ? "" : direction, more); request = new CancellationTokenSource();
         try
         {
             var turn = await buddy.WriteNovel(Page, cast, direction, applied, more, request.Token, part => Dispatcher.BeginInvoke(() => view.Streaming(part)), part => Dispatcher.BeginInvoke(() => view.Thinking(part)));
@@ -132,7 +146,7 @@ public sealed class NovelWindow : Window
         finally
         {
             request?.Dispose(); request = null; busy = view.Locked = false; send.Content = "쓰기"; first.IsEnabled = second.IsEnabled = input.IsEnabled = goOn.IsEnabled = true;
-            if (written) Reload(); if (IsVisible) input.Focus();
+            if (written) Reload(true); if (IsVisible) input.Focus();
         }
         return written;
     }
